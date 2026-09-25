@@ -150,8 +150,10 @@ step 8 for a fresh teach-back before touching the newly-in-scope files.
 
 You cannot open the gate through conversation, and you cannot leave it
 unattended through conversation either. If the developer wants to work
-without Gatekeeper, tell them to run `/depart` themselves — it is a
-user-only command and you cannot invoke it for them.
+without Gatekeeper, tell them to run `/gatekeeper:depart` themselves — it
+is a user-only command and you cannot invoke it for them. (Claude Code
+namespaces every plugin skill under `<plugin>:<skill>`, so the bare
+`/depart` does not resolve — always give the full `/gatekeeper:depart`.)
 
 ## A note on Bash and PowerShell
 

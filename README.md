@@ -269,11 +269,15 @@ Be aware of these before relying on Gatekeeper:
 - **Windows note:** tested with Git Bash's `Bash` tool and the separate `PowerShell` tool on Windows 11. Path
   normalization lower-cases drive letters and uses forward slashes internally for comparison; this is covered
   by the automated test suite.
-- **`/depart` needs an interactive session.** Confirmed directly: `claude --print` (non-interactive/headless
-  mode) does not expand *any* slash command client-side — not `/depart`, not even the built-in `/help`. In
-  headless usage there is currently no way to reach the departure skill through `/depart`; the only way off
-  the gate in that mode is the machine owner running `gatekeeper depart --confirm` themselves, or removing the
-  plugin. This is a Claude Code CLI-mode characteristic, not something Gatekeeper controls.
+- **The departure command is `/gatekeeper:depart`, not `/depart`.** Claude Code namespaces every plugin
+  skill as `/<plugin>:<skill>`; there is no unprefixed alias. `skills/gate/SKILL.md` and
+  `skills/depart/SKILL.md` both say this explicitly so Claude never tells you the wrong name.
+- **`/gatekeeper:depart` needs an interactive session.** Confirmed directly: `claude --print`
+  (non-interactive/headless mode) does not expand *any* slash command client-side — not this one, not even
+  the built-in `/help`. In headless usage there is currently no way to reach the departure skill through a
+  slash command; the only way off the gate in that mode is the machine owner running
+  `gatekeeper depart --confirm` themselves, or removing the plugin. This is a Claude Code CLI-mode
+  characteristic, not something Gatekeeper controls.
 - **`disable-model-invocation` on the depart skill is a courtesy, not the mechanical backstop.** Community
   reports suggest plugin-provided skills may not fully honor that frontmatter flag in every Claude Code
   version. Gatekeeper doesn't rely on it: the only thing that ever flips a session to unguarded is a separate
