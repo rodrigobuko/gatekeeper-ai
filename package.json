@@ -1,0 +1,38 @@
+{
+  "name": "gatekeeper-ai",
+  "version": "0.1.0",
+  "description": "An active comprehension gate for AI-assisted coding. Understand it before you ship it.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Rodrigo Bukowitz",
+  "homepage": "https://github.com/rodrigobuko/gatekeeper-ai",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rodrigobuko/gatekeeper-ai.git"
+  },
+  "bin": {
+    "gatekeeper": "./bin/gatekeeper"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "test": "node --test tests/"
+  },
+  "files": [
+    ".claude-plugin",
+    "hooks",
+    "skills",
+    "src",
+    "bin",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "claude-code",
+    "claude-code-plugin",
+    "ai-coding",
+    "code-review",
+    "teach-back"
+  ]
+}

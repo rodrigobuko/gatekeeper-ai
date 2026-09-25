@@ -1,0 +1,12 @@
+#!/usr/bin/env node
+// Cross-platform entry point. Re-execs node against the real CLI module by
+// an absolute path so it works whether this file is reached via `node
+// bin/gatekeeper`, a shebang exec, or an npm-installed symlink to it.
+import { spawnSync } from 'node:child_process';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const target = path.join(here, '..', 'src', 'cli', 'gatekeeper.mjs');
+const result = spawnSync(process.execPath, [target, ...process.argv.slice(2)], { stdio: 'inherit' });
+process.exit(result.status === null ? 1 : result.status);

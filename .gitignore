@@ -1,0 +1,18 @@
+node_modules/
+.env
+.env.*
+*.log
+npm-debug.log*
+
+# Gatekeeper local state, history, and stats must never be committed.
+.gatekeeper/
+gatekeeper-home/
+
+# Local debug logs and scratch data.
+*.debug.log
+.DS_Store
+Thumbs.db
+
+# Disposable manual-test playground repositories.
+/playground/
+/tmp/

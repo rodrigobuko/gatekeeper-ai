@@ -1,0 +1,13 @@
+{
+  "name": "gatekeeper",
+  "displayName": "Gatekeeper",
+  "version": "0.1.0",
+  "description": "An active comprehension gate for AI-assisted coding. Understand it before you ship it.",
+  "author": {
+    "name": "Rodrigo Bukowitz"
+  },
+  "homepage": "https://github.com/rodrigobuko/gatekeeper-ai",
+  "repository": "https://github.com/rodrigobuko/gatekeeper-ai",
+  "license": "MIT",
+  "keywords": ["comprehension", "code-review", "workflow", "safety", "teach-back"]
+}
