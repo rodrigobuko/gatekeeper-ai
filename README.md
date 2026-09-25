@@ -269,6 +269,21 @@ Be aware of these before relying on Gatekeeper:
 - **Windows note:** tested with Git Bash's `Bash` tool and the separate `PowerShell` tool on Windows 11. Path
   normalization lower-cases drive letters and uses forward slashes internally for comparison; this is covered
   by the automated test suite.
+- **`/depart` needs an interactive session.** Confirmed directly: `claude --print` (non-interactive/headless
+  mode) does not expand *any* slash command client-side — not `/depart`, not even the built-in `/help`. In
+  headless usage there is currently no way to reach the departure skill through `/depart`; the only way off
+  the gate in that mode is the machine owner running `gatekeeper depart --confirm` themselves, or removing the
+  plugin. This is a Claude Code CLI-mode characteristic, not something Gatekeeper controls.
+- **`disable-model-invocation` on the depart skill is a courtesy, not the mechanical backstop.** Community
+  reports suggest plugin-provided skills may not fully honor that frontmatter flag in every Claude Code
+  version. Gatekeeper doesn't rely on it: the only thing that ever flips a session to unguarded is a separate
+  `gatekeeper depart --confirm` process call, and the skill's own instructions tell Claude never to run it
+  without an explicit, separately-confirmed developer message — but assume a determined model *could* attempt
+  it, and don't treat the flag alone as a hard guarantee.
+- **Hooks declare an explicit 10-second `timeout`** in `hooks/hooks.json`. Without one, a hung or slow hook
+  can be silently killed by Claude Code's default timeout, which would fail open (no decision) with no visible
+  warning — effectively turning the gate off without telling you. Gatekeeper's hooks are synchronous local
+  file I/O and should never approach that, but the explicit timeout is cheap insurance.
 
 ## Security model
 
@@ -292,6 +307,15 @@ Be aware of these before relying on Gatekeeper:
 - Git pre-push gate based on the final diff/commits (approved-plan understanding ≠ final-code understanding)
 - OpenCode adapter
 - Other harnesses, only once they offer reliable pre-mutation interception
+
+### Prior art
+
+The pre-edit "deny until you explain it" teach-back mechanic doesn't appear to exist as a shipped Claude Code
+plugin elsewhere as of this writing. The closest published designs are risk-tiered `PreToolUse` guardrail
+plugins (gate on command/file risk level, not comprehension) and a `Stop`-hook-based human-review plugin that
+blocks turn completion until a plain-English review is shown. Both confirm the same two architectural bets
+Gatekeeper makes: a deterministic `PreToolUse` deny is the only reliable blocking surface, and `Stop` is a
+legitimate place to enforce a review/re-lock, not just `PreToolUse`.
 
 ## Contributing
 

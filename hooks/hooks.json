@@ -7,7 +7,10 @@
           {
             "type": "command",
             "command": "node",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/src/adapters/claude/pre-tool-use.mjs"]
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/src/adapters/claude/pre-tool-use.mjs"
+            ],
+            "timeout": 10
           }
         ]
       },
@@ -17,7 +20,10 @@
           {
             "type": "command",
             "command": "node",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/src/adapters/claude/pre-tool-use.mjs"]
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/src/adapters/claude/pre-tool-use.mjs"
+            ],
+            "timeout": 10
           }
         ]
       }
@@ -28,7 +34,10 @@
           {
             "type": "command",
             "command": "node",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/src/adapters/claude/user-prompt-submit.mjs"]
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/src/adapters/claude/user-prompt-submit.mjs"
+            ],
+            "timeout": 10
           }
         ]
       }
@@ -39,7 +48,10 @@
           {
             "type": "command",
             "command": "node",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/src/adapters/claude/stop.mjs"]
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/src/adapters/claude/stop.mjs"
+            ],
+            "timeout": 10
           }
         ]
       }
@@ -50,7 +62,10 @@
           {
             "type": "command",
             "command": "node",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/src/adapters/claude/config-change.mjs"]
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/src/adapters/claude/config-change.mjs"
+            ],
+            "timeout": 10
           }
         ]
       }
