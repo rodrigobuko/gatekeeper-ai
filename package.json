@@ -17,7 +17,8 @@
     "node": ">=18.0.0"
   },
   "scripts": {
-    "test": "node scripts/run-tests.mjs"
+    "test": "node scripts/run-tests.mjs",
+    "validate": "claude plugin validate ."
   },
   "files": [
     ".claude-plugin",

@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: test (${{ matrix.os }}, node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node: [18, 24] # 18 = package.json's stated minimum; 24 = current at authoring time
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      # Same command PILOT_TESTING.md and README.md tell contributors to
+      # run — CI must trust the documented command, not a separate one.
+      - name: npm test
+        run: npm test
+
+      - name: Validate plugin.json and hooks.json parse as valid JSON
+        shell: bash
+        run: |
+          node -e "JSON.parse(require('fs').readFileSync('.claude-plugin/plugin.json', 'utf8')); console.log('plugin.json OK')"
+          node -e "JSON.parse(require('fs').readFileSync('hooks/hooks.json', 'utf8')); console.log('hooks.json OK')"
+          node -e "JSON.parse(require('fs').readFileSync('package.json', 'utf8')); console.log('package.json OK')"
+
+  plugin-validate:
+    name: claude plugin validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # `claude plugin validate` needs the Claude Code CLI installed; if
+      # that installation step becomes unreliable/rate-limited in CI, this
+      # job is allowed to fail without blocking the required `test` job
+      # (see continue-on-error below) — local release validation
+      # (`npm run validate` / `claude plugin validate .`) remains the
+      # authoritative check either way. See README's CI section.
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+        continue-on-error: true
+        id: install-cli
+      - name: Validate plugin manifest
+        if: steps.install-cli.outcome == 'success'
+        run: claude plugin validate .
+        continue-on-error: true

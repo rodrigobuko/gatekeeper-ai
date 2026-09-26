@@ -1,0 +1,112 @@
+name: Pilot feedback
+description: Feedback from running through PILOT_TESTING.md
+title: "[Pilot] "
+labels: ["pilot-feedback"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for pilot testing Gatekeeper. Please don't paste your actual
+        project's source code or prompts here — the questions below are
+        designed to be answerable without them.
+
+  - type: input
+    id: os
+    attributes:
+      label: OS
+      placeholder: "e.g. Windows 11, macOS 14, Ubuntu 22.04"
+    validations:
+      required: true
+
+  - type: input
+    id: claude-code-version
+    attributes:
+      label: Claude Code version
+      placeholder: "output of `claude --version`"
+    validations:
+      required: true
+
+  - type: input
+    id: gatekeeper-version
+    attributes:
+      label: Gatekeeper version
+      placeholder: "output of `gatekeeper version`"
+    validations:
+      required: true
+
+  - type: input
+    id: task-type
+    attributes:
+      label: What kind of task were you doing?
+      placeholder: "e.g. add a small feature, fix a bug, refactor"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: triggered-right-time
+    attributes:
+      label: Did the gate trigger at the right time?
+      options:
+        - "Yes, right before the first real edit"
+        - "Too early / too often"
+        - "Too late / missed a mutation it should have caught"
+        - "Not sure"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: question-quality
+    attributes:
+      label: Question quality (1 = generic/irrelevant, 5 = sharp and specific)
+      options: ["1", "2", "3", "4", "5"]
+    validations:
+      required: true
+
+  - type: dropdown
+    id: friction
+    attributes:
+      label: Friction (1 = seamless, 5 = so annoying you wanted to disable it)
+      options: ["1", "2", "3", "4", "5"]
+    validations:
+      required: true
+
+  - type: dropdown
+    id: simplified-plan
+    attributes:
+      label: Did Gatekeeper change or simplify your plan for the better?
+      options: ["Yes", "No", "N/A — plan was already simple"]
+    validations:
+      required: true
+
+  - type: textarea
+    id: learned-something
+    attributes:
+      label: Did you notice or learn something about the change you'd otherwise have missed?
+      placeholder: Describe briefly, no source code needed.
+
+  - type: dropdown
+    id: false-block
+    attributes:
+      label: Did it ever block something it shouldn't have (a false block)?
+      options: ["No", "Yes — see notes below"]
+    validations:
+      required: true
+
+  - type: dropdown
+    id: missed-block
+    attributes:
+      label: Did you find a way to bypass it that you don't think should have worked?
+      options: ["No", "Yes — see notes below"]
+    validations:
+      required: true
+
+  - type: textarea
+    id: disable-reason
+    attributes:
+      label: What would make you turn this off?
+      placeholder: Be honest — this is the most useful answer in this form.
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else
