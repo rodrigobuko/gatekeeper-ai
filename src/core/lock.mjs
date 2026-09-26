@@ -21,6 +21,14 @@ function sleepSync(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
+// On Windows, a concurrent create/delete race on the same path can surface
+// as EPERM (sometimes EBUSY) instead of EEXIST — NTFS briefly reports
+// "access denied" while a file is mid-delete rather than "already exists".
+// Reproduced directly: 20 concurrent processes locking the same path hit
+// this roughly 1 in 30 runs. Treat all three as "contended, keep retrying",
+// not as a fatal error.
+const CONTENDED_CODES = new Set(['EEXIST', 'EPERM', 'EBUSY']);
+
 function acquire(lockPath) {
   const deadline = Date.now() + MAX_WAIT_MS;
   for (;;) {
@@ -30,7 +38,7 @@ function acquire(lockPath) {
       fs.closeSync(fd);
       return;
     } catch (err) {
-      if (err.code !== 'EEXIST') throw err;
+      if (!CONTENDED_CODES.has(err.code)) throw err;
     }
 
     let stale = false;
