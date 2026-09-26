@@ -10,7 +10,8 @@
 import crypto from 'node:crypto';
 import { isProtectedFile, normalizeFilePath } from './files.mjs';
 import { classifyCommand } from './shell-policy.mjs';
-import { computeComplexity } from './complexity.mjs';
+import { computeComplexity, countDirectoriesCrossed } from './complexity.mjs';
+import { captureGitBaseline } from './git-baseline.mjs';
 
 export function currentGrant(state) {
   if (!state.grant || !state.challenge) return null;
@@ -120,12 +121,15 @@ export function evaluateShellCommand(state, command, shell) {
   };
 }
 
-export function createChallenge(state, { summary, files = [], newFiles = [], flags = {}, cwd }) {
+export function createChallenge(state, { summary, files = [], newFiles = [], flags = {}, cwd, mustNotChange = [], assumptions = [] }) {
   const normalizedFiles = files.map((f) => normalizeFilePath(f, cwd));
   const normalizedNewFiles = newFiles.map((f) => normalizeFilePath(f, cwd));
+  const newExportCount = Number.isFinite(flags.newExportCount) ? flags.newExportCount : 0;
   const complexity = computeComplexity({
     fileCount: normalizedFiles.length,
     newFileCount: normalizedNewFiles.length,
+    directoriesCrossed: countDirectoriesCrossed(normalizedFiles),
+    newExportCount,
     flags,
   });
 
@@ -134,6 +138,12 @@ export function createChallenge(state, { summary, files = [], newFiles = [], fla
     summary,
     files: normalizedFiles,
     newFiles: normalizedNewFiles,
+    // Compact task contract (hardening section 8): optional, only as much
+    // as needed to give semantic plan drift a concrete object to check
+    // against. Never a substitute for a full spec — just enough that "an
+    // approved assumption became false" has something specific to point at.
+    mustNotChange: Array.isArray(mustNotChange) ? mustNotChange.filter(Boolean) : [],
+    assumptions: Array.isArray(assumptions) ? assumptions.filter(Boolean) : [],
     flags: {
       newDependency: Boolean(flags.newDependency),
       architectureChange: Boolean(flags.architectureChange),
@@ -141,6 +151,10 @@ export function createChallenge(state, { summary, files = [], newFiles = [], fla
       plannedTests: Boolean(flags.plannedTests),
     },
     complexity,
+    // Section 9: a cheap local Git baseline, captured once at challenge
+    // time, for change-shape verification later (`gatekeeper diff`) — not
+    // semantic grading, and never a full diff stored to disk.
+    gitBaseline: captureGitBaseline(cwd),
     createdAt: new Date().toISOString(),
     userResponsesAfterChallenge: 0,
     latestResponseEligibleForGrant: false,
@@ -250,10 +264,10 @@ export function grantTeachback(state, { assessment }) {
   };
 }
 
-export function reviseChallenge(state, { summary, files = [], newFiles = [], flags = {}, cwd }) {
+export function reviseChallenge(state, { summary, files = [], newFiles = [], flags = {}, cwd, mustNotChange = [], assumptions = [] }) {
   const previousChallengeId = state.challenge ? state.challenge.id : null;
   const previousFileCount = state.challenge ? state.challenge.files.length : 0;
-  createChallenge(state, { summary, files, newFiles, flags, cwd });
+  createChallenge(state, { summary, files, newFiles, flags, cwd, mustNotChange, assumptions });
   return { ok: true, previousChallengeId, previousFileCount, challenge: state.challenge };
 }
 

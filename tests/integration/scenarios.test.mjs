@@ -4,6 +4,9 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
 import {
   makeTempHome,
   makeTempProject,
@@ -255,4 +258,60 @@ test('status --json returns stable, secret-free machine-readable status', () => 
   assert.equal(challenged.fileCount, 1);
   assert.equal('assessment' in challenged, false);
   assert.equal(JSON.stringify(challenged).includes('prompt'), false);
+});
+
+test('challenge accepts a compact task contract (--must-not-change / --assumption, repeatable)', () => {
+  const home = makeTempHome();
+  const cwd = makeTempProject();
+
+  const challenge = runCli(
+    [
+      'challenge',
+      '--summary',
+      'Rotate refresh tokens',
+      '--files',
+      `${cwd}/src/auth.ts`,
+      '--must-not-change',
+      'Existing login request/response contract',
+      '--must-not-change',
+      'Access-token validation behavior',
+      '--assumption',
+      'Session store can perform atomic replacement',
+    ],
+    { cwd, home },
+  );
+  assert.match(challenge.stdout, /Must remain true:/);
+  assert.match(challenge.stdout, /Existing login request\/response contract/);
+  assert.match(challenge.stdout, /Access-token validation behavior/);
+  assert.match(challenge.stdout, /Key assumption:/);
+
+  const status = runCli(['status'], { cwd, home });
+  assert.match(status.stdout, /Must remain true:.*Existing login/);
+  assert.match(status.stdout, /Key assumption\(s\):.*atomic replacement/);
+});
+
+test('gatekeeper diff reports files changed since the challenge opened, from a real Git repo', () => {
+  const home = makeTempHome();
+  const cwd = makeTempProject();
+  const git = (args) => execFileSync('git', args, { cwd, stdio: 'ignore' });
+  git(['init', '-q', '-b', 'main']);
+  git(['config', 'user.email', 'test@example.com']);
+  git(['config', 'user.name', 'Test']);
+  fs.mkdirSync(path.join(cwd, 'src'), { recursive: true });
+  fs.writeFileSync(path.join(cwd, 'src', 'user.ts'), 'export const a = 1;\n');
+  git(['add', '-A']);
+  git(['commit', '-q', '-m', 'initial']);
+
+  const noChallenge = runCli(['diff'], { cwd, home });
+  assert.equal(noChallenge.status, 1);
+
+  runCli(['challenge', '--summary', 'x', '--files', `${cwd}/src/user.ts`], { cwd, home });
+  fs.writeFileSync(path.join(cwd, 'src', 'user.ts'), 'export const a = 2;\n');
+  fs.writeFileSync(path.join(cwd, 'src', 'unrelated.ts'), 'export const b = 1;\n');
+
+  const diff = runCli(['diff'], { cwd, home });
+  assert.equal(diff.status, 0);
+  assert.match(diff.stdout, /2 file\(s\) changed/);
+  assert.match(diff.stdout, /WARNING: protected files changed outside the approved scope/);
+  assert.match(diff.stdout, /unrelated\.ts/);
 });

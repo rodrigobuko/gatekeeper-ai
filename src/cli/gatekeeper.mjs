@@ -27,6 +27,7 @@ import {
 } from '../core/engine.mjs';
 import { appendEvent, readHistory, SYMBOLS } from '../core/history.mjs';
 import { loadStats, updateStats } from '../core/stats.mjs';
+import { computeChangeShape } from '../core/git-baseline.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -46,6 +47,21 @@ function toArray(value) {
   return Array.isArray(value) ? value : [value];
 }
 
+// A flag repeated across separate `--name value` occurrences accumulates
+// (e.g. `--must-not-change "a" --must-not-change "b"` -> ["a", "b"]) rather
+// than the last one winning — needed for optional repeatable flags like
+// --must-not-change / --assumption (hardening section 8).
+function setFlag(flags, name, values) {
+  const value = values.length === 0 ? true : values.length === 1 ? values[0] : values;
+  if (Object.prototype.hasOwnProperty.call(flags, name)) {
+    const existing = Array.isArray(flags[name]) ? flags[name] : [flags[name]];
+    const incoming = Array.isArray(value) ? value : [value];
+    flags[name] = [...existing, ...incoming];
+  } else {
+    flags[name] = value;
+  }
+}
+
 function parseArgs(argv) {
   const [command, ...rest] = argv;
   const flags = {};
@@ -60,9 +76,7 @@ function parseArgs(argv) {
         values.push(rest[i]);
         i += 1;
       }
-      if (values.length === 0) flags[name] = true;
-      else if (values.length === 1) [flags[name]] = values;
-      else flags[name] = values;
+      setFlag(flags, name, values);
     } else {
       i += 1;
     }
@@ -76,11 +90,13 @@ function fail(message) {
 }
 
 function flagsFromCli(flags) {
+  const newExports = flags['new-exports'];
   return {
     newDependency: Boolean(flags['new-dependency']),
     architectureChange: Boolean(flags['architecture-change']),
     schemaChange: Boolean(flags['schema-change']),
     plannedTests: Boolean(flags['planned-tests']),
+    newExportCount: newExports !== undefined ? Number(newExports) : 0,
   };
 }
 
@@ -107,6 +123,8 @@ function cmdChallenge(home, cwd, flags) {
       newFiles: toArray(flags['new-files']),
       flags: flagsFromCli(flags),
       cwd,
+      mustNotChange: toArray(flags['must-not-change']),
+      assumptions: toArray(flags.assumption),
     }),
   );
 
@@ -122,6 +140,14 @@ function cmdChallenge(home, cwd, flags) {
     flags: challenge.flags,
   });
 
+  const contractLines = [];
+  if (challenge.mustNotChange.length > 0) {
+    contractLines.push('Must remain true:', ...challenge.mustNotChange.map((s) => `- ${s}`), '');
+  }
+  if (challenge.assumptions.length > 0) {
+    contractLines.push('Key assumption:', ...challenge.assumptions.map((s) => `- ${s}`), '');
+  }
+
   process.stdout.write(
     [
       'GATEKEEPER',
@@ -130,6 +156,7 @@ function cmdChallenge(home, cwd, flags) {
       `Files (${challenge.files.length}): ${challenge.files.join(', ')}`,
       `Complexity: ${describeComplexity(challenge.complexity)}`,
       '',
+      ...contractLines,
       'The gate stays locked until the developer teaches back and "gatekeeper grant" succeeds.',
     ].join('\n') + '\n',
   );
@@ -195,6 +222,8 @@ function cmdRevise(home, cwd, flags) {
       newFiles: toArray(flags['new-files']),
       flags: flagsFromCli(flags),
       cwd,
+      mustNotChange: toArray(flags['must-not-change']),
+      assumptions: toArray(flags.assumption),
     }),
   );
 
@@ -332,11 +361,58 @@ function cmdStatus(home, cwd, flags) {
     lines.push(`Responses so far: ${state.challenge.userResponsesAfterChallenge}`);
     lines.push(`Latest response eligible for grant: ${state.challenge.latestResponseEligibleForGrant}`);
     lines.push(`Failed teach-backs: ${state.challenge.failedTeachbacks}`);
+    if (state.challenge.mustNotChange.length > 0) {
+      lines.push(`Must remain true: ${state.challenge.mustNotChange.join(' | ')}`);
+    }
+    if (state.challenge.assumptions.length > 0) {
+      lines.push(`Key assumption(s): ${state.challenge.assumptions.join(' | ')}`);
+    }
   } else {
     lines.push('Phase: LOCKED (no active challenge)');
   }
   if (state.departure && state.departure.pending) {
     lines.push('', `Departure requested, awaiting confirmation phrase (confirmed: ${state.departure.confirmedByUser}).`);
+  }
+  process.stdout.write(`${lines.join('\n')}\n`);
+}
+
+// Section 9 diagnostic: on-demand change-shape summary since the challenge
+// opened. Nothing here is persisted — it's computed fresh from git each
+// time. This is groundwork for a future pre-push gate, not one itself: it
+// only reports, it never denies anything.
+function cmdDiff(home, cwd, flags) {
+  const { state } = loadState(home, cwd);
+  if (!state.challenge) {
+    return fail('gatekeeper diff: no active challenge for this directory.');
+  }
+  if (!state.challenge.gitBaseline) {
+    return fail('gatekeeper diff: no Git baseline was captured for this challenge (not a Git repo at challenge time?).');
+  }
+
+  const grant = currentGrant(state);
+  const approvedFiles = grant ? grant.files : state.challenge.files;
+  const shape = computeChangeShape(cwd, state.challenge.gitBaseline, approvedFiles);
+  if (!shape) {
+    return fail('gatekeeper diff: could not compute a diff (is Git still available in this directory?).');
+  }
+
+  if (flags.json) {
+    process.stdout.write(`${JSON.stringify(shape)}\n`);
+    return;
+  }
+
+  const lines = [
+    'GATEKEEPER DIFF',
+    '',
+    `Since challenge opened at ${shape.headShaAtChallenge.slice(0, 8)}:`,
+    `${shape.changedCount} file(s) changed.${shape.statSummary ? ` ${shape.statSummary.trim()}` : ''}`,
+  ];
+  for (const entry of shape.changedFiles) {
+    lines.push(`  ${entry.status}\t${entry.path}`);
+  }
+  if (shape.outOfScopeProtected.length > 0) {
+    lines.push('', 'WARNING: protected files changed outside the approved scope:');
+    for (const f of shape.outOfScopeProtected) lines.push(`  ${f}`);
   }
   process.stdout.write(`${lines.join('\n')}\n`);
 }
@@ -515,9 +591,14 @@ function printUsage() {
       '  reset                         Re-lock this session without touching history/stats',
       '  depart --request               Start departure (asks for the exact confirmation phrase)',
       '  depart --confirm               Finish departure (requires the phrase to have been sent)',
+      '  diff [--json]                   Show files changed since the challenge opened (Git-based)',
       '  stats                         Show aggregate counters',
       '  history [--limit N]           Show recent events',
       '  version                       Print the installed version',
+      '',
+      'challenge/revise also accept: --new-files <f...> --new-dependency --architecture-change',
+      '  --schema-change --planned-tests --new-exports <n> --must-not-change "<text>" (repeatable)',
+      '  --assumption "<text>" (repeatable)',
     ].join('\n'),
   );
 }
@@ -542,6 +623,8 @@ function main() {
       return cmdReset(home, cwd);
     case 'depart':
       return cmdDepart(home, cwd, flags);
+    case 'diff':
+      return cmdDiff(home, cwd, flags);
     case 'stats':
       return cmdStats(home);
     case 'history':

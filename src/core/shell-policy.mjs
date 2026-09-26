@@ -149,6 +149,7 @@ const CLI_SUBCOMMANDS = [
   'history',
   'version',
   'doctor',
+  'diff',
 ];
 const SUBCOMMAND_ALT = CLI_SUBCOMMANDS.join('|');
 
