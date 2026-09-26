@@ -2,10 +2,39 @@
 
 **Understand it before you ship it.**
 
-Gatekeeper is a [Claude Code](https://claude.com/claude-code) plugin that stops you from becoming a passive
-approver of AI-generated code. It turns AI coding into an active engineering conversation: your agent can
-explain, teach, investigate and debate freely, but protected code stays locked until you can explain what
-you are building and why — in your own words.
+Gatekeeper turns AI coding into an active engineering conversation: protected code stays locked until you
+can explain what is being built and why. Your agent can investigate, explain, teach and debate freely —
+protected code just doesn't move until you can explain the change back in your own words.
+
+## 60-second version
+
+```
+you ask for a change
+        ↓
+   Gatekeeper locks
+        ↓
+  one strong question
+        ↓
+help / questions / pushback (as much as you need — free)
+        ↓
+     teach-back
+        ↓
+    YOU ARE WORTHY
+        ↓
+   agent implements
+```
+
+## What it blocks
+
+`Edit`, `Write`, `Bash`, and `PowerShell` on protected files (source, most config/infra files — not docs)
+are denied at the tool-call level, before anything happens, while the gate is locked. See
+[How the gate works](#how-the-gate-works) for exactly what "locked" and "grant" mean.
+
+## What it does not guarantee
+
+This is workflow enforcement, not a hostile security sandbox: the machine owner can disable hooks, remove
+the plugin, or edit files by hand outside Claude Code. See [Limitations](#limitations) and
+[Security model](#security-model) for the honest, complete list.
 
 ## What problem it solves
 
@@ -155,21 +184,65 @@ Gate opened for this implementation.
 This exact phrase is reserved for a passed teach-back. It is never used for tests passing, a plan revision,
 a departure, or the completion of an implementation.
 
-## Install / test locally
+## Explicit departure
 
-Gatekeeper isn't on a marketplace yet. Clone it and load it with `--plugin-dir`:
+You can leave Gatekeeper unattended, but not through conversation — only by typing `/gatekeeper:depart`
+yourself in the Claude Code prompt box (Claude cannot invoke this on your behalf, and a request like "skip
+Gatekeeper" is treated as a bypass attempt, not a departure). It's a two-stage, mechanically-confirmed exit:
+
+```
+GATEKEEPER
+
+The Gatekeeper prepares to return to the Astral Lands.
+...
+If you are certain, reply exactly:
+
+DEPART GATEKEEPER
+```
+
+Only after you send that exact phrase — observed as a real message by Claude Code's `UserPromptSubmit`
+hook, not something a model call can fabricate — does `gatekeeper depart --confirm` succeed:
+
+```
+GATEKEEPER
+
+The Gatekeeper returns to the Astral Lands.
+
+The gate is unguarded.
+You may proceed in unworthiness.
+```
+
+Never `YOU ARE WORTHY` — that phrase is reserved for a passed teach-back, not an exit.
+
+## Install
+
+### From the marketplace in this repo
+
+```bash
+claude plugin marketplace add rodrigobuko/gatekeeper-ai
+claude plugin install gatekeeper@gatekeeper-ai
+```
+
+This installs at user scope (every project on your machine) by default; pass `--scope project` or
+`--scope local` to `claude plugin install` to narrow that. Confirm it loaded with `claude plugin list` or
+`/plugin` in a session.
+
+### Local development (`--plugin-dir`)
 
 ```bash
 git clone https://github.com/rodrigobuko/gatekeeper-ai.git
 cd gatekeeper-ai
 npm test                       # run the automated suite
-claude plugin validate .       # validate the manifest
+npm run validate                # validate plugin.json and marketplace.json
 
 # From any other project you want to try it against:
 claude --plugin-dir /absolute/path/to/gatekeeper-ai
 ```
 
 If you edit the plugin's source while a session is open, run `/reload-plugins` to pick up the change.
+`--plugin-dir` is also how the marketplace install itself was verified end-to-end before this was written
+up — see [`IMPLEMENTATION_NOTES.md`](IMPLEMENTATION_NOTES.md) for what's been proven live versus by
+automated test alone.
 
 ### Reproducing the demo yourself
 
@@ -198,20 +271,30 @@ All commands operate on the Gatekeeper state for the **current working directory
 directory, not by an opaque session id — see [Security model](#security-model)).
 
 ```
-gatekeeper status                          Show the current gate phase for this directory
+gatekeeper status [--json]                 Show the current gate phase for this directory
 gatekeeper challenge --summary <s> --files <f...>   Open a challenge (locks protected mutation)
 gatekeeper reject --reason <r>             Record an insufficient teach-back
 gatekeeper grant --assessment <a>          Open the gate for the active challenge
 gatekeeper revise --summary <s> --files <f...>      Replace the active challenge (scope/plan change)
 gatekeeper reset                           Re-lock this session without touching history/stats
-gatekeeper depart --confirm                Explicit, user-confirmed departure (skill-only)
+gatekeeper depart --request                Start departure (prints the exact confirmation phrase)
+gatekeeper depart --confirm                Finish departure (only after that phrase was sent)
+gatekeeper diff [--json]                   Files changed since the challenge opened (Git-based, best-effort)
+gatekeeper doctor [--json]                 Safe environment diagnostics for bug reports
 gatekeeper stats                           Show aggregate counters
 gatekeeper history [--limit N]             Show recent events
 gatekeeper version                         Print the installed version
 ```
 
 `challenge` and `revise` also accept `--new-files <path...>`, `--new-dependency`, `--architecture-change`,
-`--schema-change`, and `--planned-tests` to feed the simplicity heuristic honestly.
+`--schema-change`, `--planned-tests`, `--new-exports <n>`, and repeatable `--must-not-change "<text>"` /
+`--assumption "<text>"` for an optional compact task contract on non-trivial changes.
+
+## Coworker testing
+
+[`PILOT_TESTING.md`](PILOT_TESTING.md) is a ~10–15 minute walkthrough covering the lock, a wrong answer, a
+help request, a correct teach-back, scope drift, a conversational bypass, a shell bypass attempt, and
+explicit departure. It ends with a link to the feedback issue template.
 
 ## Stats / history
 
@@ -244,17 +327,25 @@ Be aware of these before relying on Gatekeeper:
   Code mutation paths (`Edit`, `Write`, `Bash`, `PowerShell`) cannot be opened by conversational instruction
   alone.*
 - **Shell classification is best-effort string matching, not a real parser** (`src/core/shell-policy.mjs`).
-  It can be fooled by creative quoting/chaining, and it can occasionally flag a read-only command that
-  happens to contain a mutation-shaped substring (for example, a search pattern containing `>`). Unclassified
-  commands are allowed by default rather than blocked, to keep the tool usable.
+  It can be fooled by creative quoting, and it can occasionally flag a read-only command that happens to
+  contain a mutation-shaped substring (for example, a search pattern containing `>`). While the gate is
+  locked, an unrecognized command is denied by default, not allowed — the classifier only needs to
+  recognize a command as safe, never as dangerous, to keep the gate meaningful. This did mean a real bypass
+  in an earlier version (`gatekeeper status && rm file` was briefly misclassified as a trusted call); that's
+  now closed by requiring the *entire* command to match a supported shape, with a quote-aware scan that
+  rejects any unquoted chaining operator.
 - **Shell mutation is not scope-checked.** Once a grant is active, a mutating shell command is allowed
   outright (best-effort) — Gatekeeper cannot reliably extract "which files" from arbitrary shell syntax the
   way it can from an `Edit`/`Write` tool call's `file_path`.
 - **Grant revocation is per-turn, not per-challenge.** If the active grant is used to perform a protected
   mutation, it is revoked at the end of that Claude Code turn (the `Stop` hook), so unrelated later work
-  can't silently inherit it. A multi-turn implementation under the *same* approved scope will need a fresh,
-  quick grant on its next protected mutation rather than staying open indefinitely — this is a deliberate,
-  conservative choice, not an oversight.
+  can't silently inherit it. This was compared against letting a grant survive across turns while the
+  challenge stays unchanged, and rejected for the pilot: the file-scope check that would need to prevent an
+  unrelated task from reusing a stale grant depends entirely on the model correctly deciding the new task
+  "looks unrelated," which is exactly the kind of guarantee this project doesn't want to rest on model
+  judgment. Instead, a multi-turn implementation of the *same* approved change only needs one more real,
+  non-bypass message to re-grant — not a full new teach-back, since comprehension was already demonstrated
+  once (see `hasBeenGranted` in `src/core/engine.mjs`).
 - **Semantic plan drift detection depends on Claude noticing it**, not on a mechanical diff. The mechanical
   guarantees are file-scope enforcement and the human-turn counter; recognizing "this assumption turned out
   to be false" is the model's judgment, guided by the gate skill.
@@ -302,29 +393,72 @@ Be aware of these before relying on Gatekeeper:
   to a directory that had a leftover challenge/grant from a previous process) re-locks the gate automatically,
   so a stale grant can never carry over into a new session.
 - The Gatekeeper CLI's own invocations (`gatekeeper ...` / `node .../gatekeeper.mjs ...`) are recognized and
-  never blocked by Gatekeeper's own shell policy — narrowly, by exact invocation shape, not by the mere
-  presence of the word "gatekeeper" anywhere in a command (`src/core/shell-policy.mjs`).
+  never blocked by Gatekeeper's own shell policy — narrowly, by exact invocation shape (the whole command,
+  with no unquoted chaining operator), not by the mere presence of the word "gatekeeper" anywhere in a
+  command (`src/core/shell-policy.mjs`).
+- A help request or passive approval ("looks good", "go ahead", "I don't understand, can you explain?") is
+  mechanically ineligible for `gatekeeper grant`, the same way an explicit bypass attempt is — this isn't
+  left to the model's judgment either (`src/core/bypass.mjs`'s 5-way response classifier).
+- Reads and read-modify-writes of Gatekeeper's own state, stats, and history files are protected by a small
+  dependency-free file lock (`src/core/lock.mjs`), so two Claude Code processes racing for the same
+  directory can't interleave a read-modify-write and silently drop one side's update.
 
 ## Roadmap
 
+The next major feature after the coworker pilot should be a **Git pre-push / final-diff comprehension
+gate**, because the approved plan can differ from what actually got committed (`gatekeeper diff` above is
+the groundwork for this, not the feature itself) — but that needs validating v0.1 with real humans first.
+
+Tracked as roadmap issues (to be filed on GitHub once this repo is public, rather than implemented here):
+
+- Final-diff / pre-push comprehension gate
 - Codex adapter
-- Git pre-push gate based on the final diff/commits (approved-plan understanding ≠ final-code understanding)
 - OpenCode adapter
-- Other harnesses, only once they offer reliable pre-mutation interception
+- Configurable question depth
+- Richer semantic task contract
+- Shell target extraction for scoped shell writes (today, shell mutation is allowed outright once granted —
+  see [Limitations](#limitations))
+- Pilot-informed grant lifetime (revisit the per-turn-revocation tradeoff above once real pilot data exists)
+
+Explicitly not planned soon: a web dashboard, a cloud backend, a team leaderboard, a developer score,
+AI-generated performance reviews, remote telemetry, a full AST shell parser, or an enterprise policy server —
+Gatekeeper's narrow value is human understanding and active engineering participation, not becoming a
+project-management platform.
 
 ### Prior art
 
 The pre-edit "deny until you explain it" teach-back mechanic doesn't appear to exist as a shipped Claude Code
-plugin elsewhere as of this writing. The closest published designs are risk-tiered `PreToolUse` guardrail
-plugins (gate on command/file risk level, not comprehension) and a `Stop`-hook-based human-review plugin that
-blocks turn completion until a plain-English review is shown. Both confirm the same two architectural bets
-Gatekeeper makes: a deterministic `PreToolUse` deny is the only reliable blocking surface, and `Stop` is a
-legitimate place to enforce a review/re-lock, not just `PreToolUse`.
+plugin elsewhere as of this writing. Gatekeeper's actual distinction from what's out there:
+
+> Gatekeeper focuses on comprehension **before delegation**, with deterministic pre-mutation blocking and
+> active developer discussion — not a post-hoc quiz, and not a risk-tiered permission gate.
+
+Nobody credited below was copied from; each entry names the specific idea Gatekeeper borrowed or measured
+itself against, and the license/attribution of any of these projects hasn't been separately checked before
+naming them here.
+
+| Project | What it inspired |
+|---|---|
+| [Socratic Skills](https://github.com/rodbv/socratic-skills) | One question at a time, with a probing follow-up before revealing the answer, instead of a checklist of questions at once |
+| [No-Numb](https://github.com/Ciucky/no-numb) | Comprehension as a forcing function, and distinguishing conceptual from code-grounded questions — Gatekeeper differs by gating *before* implementation, not mainly quizzing after generated code |
+| [vibecheck](https://github.com/dalvgit/vibecheck) | The adapter-based multi-harness direction this repo already uses, and the final-diff/pre-push idea on the roadmap — Gatekeeper does not adopt its skip-anytime/multiple-choice flow |
+| [comprehension-gate](https://github.com/erickdevz/comprehension-gate) | Comprehension as a real merge/release workflow concern, retry rather than one-shot grading, no developer intelligence score |
+| [Anthropic security-guidance](https://github.com/anthropics/claude-code/tree/main/plugins/security-guidance) | Explicit hook timeouts, Git-baseline/changed-diff thinking, bounded metadata instead of storing raw content, honest best-effort framing — Gatekeeper does not add a second LLM call the way this plugin does |
+| [Anthropic PR Review Toolkit](https://github.com/anthropics/claude-code/tree/main/plugins/pr-review-toolkit) | Behavioral test-coverage analysis ("what does this test actually protect?") and challenging unnecessary complexity |
+| [universal-dev-flow-plugin](https://github.com/kktu6507/universal-dev-flow-plugin) | The compact task contract (`--must-not-change`/`--assumption`) as a concrete object for semantic drift, kept far narrower than its full spec-driven framework |
+| [CCF — Claude Context First](https://github.com/naniiluja/ccf) | Hooks as the deterministic layer, and context recovery across session/compact boundaries (see the `SessionStart` limitation above) — Gatekeeper does not adopt its full spec-driven development framework |
+
+Deliberately not adopted from any of the above: a "skip"/"not now"/auto-pass flow — departure is a distinct,
+explicitly-confirmed exit, never a quiet pass — turning Gatekeeper into a project manager or spec generator,
+or any developer score/rating.
 
 ## Contributing
 
-This is a v0.1. Issues and PRs are welcome — please include a failing test for bug reports where practical.
-Run `npm test` and `claude plugin validate .` before opening a PR.
+This is a v0.1, hardened once against a real external audit — see [`IMPLEMENTATION_NOTES.md`](IMPLEMENTATION_NOTES.md)
+for what's actually been proven versus unit-tested only. Issues and PRs are welcome — please include a
+failing test for bug reports where practical. Run `npm test` and `npm run validate` before opening a PR; CI
+runs the former on Ubuntu/Windows/macOS (see [Roadmap issues](#roadmap) for what's tracked as
+follow-up work rather than done here).
 
 ## License
 
