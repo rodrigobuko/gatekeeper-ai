@@ -18,7 +18,7 @@
   },
   "scripts": {
     "test": "node scripts/run-tests.mjs",
-    "validate": "claude plugin validate ."
+    "validate": "claude plugin validate .claude-plugin/plugin.json --strict && claude plugin validate .claude-plugin/marketplace.json --strict"
   },
   "files": [
     ".claude-plugin",

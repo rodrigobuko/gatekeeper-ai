@@ -1,0 +1,14 @@
+{
+  "name": "gatekeeper-ai",
+  "owner": {
+    "name": "Rodrigo Bukowitz"
+  },
+  "description": "Marketplace for the Gatekeeper Claude Code plugin — an active comprehension gate for AI-assisted coding. Understand it before you ship it.",
+  "plugins": [
+    {
+      "name": "gatekeeper",
+      "source": ".",
+      "description": "An active comprehension gate for AI-assisted coding. Understand it before you ship it."
+    }
+  ]
+}
