@@ -5,6 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { ensureHome } from './state.mjs';
+import { withFileLock } from './lock.mjs';
 
 const MAX_ENTRIES = 2000;
 
@@ -32,23 +33,28 @@ function clampString(value, maxLen = 160) {
   return value.length > maxLen ? `${value.slice(0, maxLen - 1)}…` : value;
 }
 
+// Locked (hardening P1.1): the append itself is a single small write, but
+// rotation reads the whole file and rewrites it, which could otherwise
+// interleave with a concurrent process's append and drop a line.
 export function appendEvent(home, event) {
   ensureHome(home);
   const file = historyPath(home);
-  const entry = {
-    ts: new Date().toISOString(),
-    type: event.type,
-    harness: event.harness ?? 'claude',
-    attempt: event.attempt,
-    fileCount: event.fileCount,
-    challengeId: event.challengeId,
-    summary: clampString(event.summary),
-    reason: clampString(event.reason),
-    flags: event.flags,
-  };
-  fs.appendFileSync(file, `${JSON.stringify(entry)}\n`, 'utf8');
-  rotateIfNeeded(home);
-  return entry;
+  return withFileLock(file, () => {
+    const entry = {
+      ts: new Date().toISOString(),
+      type: event.type,
+      harness: event.harness ?? 'claude',
+      attempt: event.attempt,
+      fileCount: event.fileCount,
+      challengeId: event.challengeId,
+      summary: clampString(event.summary),
+      reason: clampString(event.reason),
+      flags: event.flags,
+    };
+    fs.appendFileSync(file, `${JSON.stringify(entry)}\n`, 'utf8');
+    rotateIfNeeded(home);
+    return entry;
+  });
 }
 
 function rotateIfNeeded(home) {

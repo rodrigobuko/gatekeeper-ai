@@ -16,6 +16,7 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { pickPathModule } from './files.mjs';
+import { withFileLock } from './lock.mjs';
 
 const STATE_VERSION = 1;
 
@@ -108,4 +109,19 @@ export function saveState(home, cwd, state) {
   fs.writeFileSync(tmp, JSON.stringify(next, null, 2), 'utf8');
   fs.renameSync(tmp, file); // atomic replace on POSIX and Windows (libuv MoveFileEx)
   return next;
+}
+
+// Runs the whole load -> mutate -> save cycle as one locked transaction
+// (hardening P1.1), so two hook processes racing for the same directory
+// can't interleave a read-modify-write. `fn(state, corrupt)` mutates
+// `state` in place; its return value is passed through. The lock lives
+// next to the state file itself, so it's automatically per-directory too.
+export function withStateLock(home, cwd, fn) {
+  ensureHome(home);
+  return withFileLock(statePath(home, cwd), () => {
+    const { state, corrupt } = loadState(home, cwd);
+    const result = fn(state, corrupt);
+    saveState(home, cwd, state);
+    return result;
+  });
 }

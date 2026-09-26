@@ -12,7 +12,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
 
-import { resolveHome, loadState, saveState } from '../core/state.mjs';
+import { resolveHome, loadState, withStateLock } from '../core/state.mjs';
 import {
   createChallenge,
   rejectTeachback,
@@ -98,15 +98,15 @@ function cmdChallenge(home, cwd, flags) {
     return fail('gatekeeper challenge: --files <path...> is required.');
   }
 
-  const { state } = loadState(home, cwd);
-  const challenge = createChallenge(state, {
-    summary: flags.summary,
-    files,
-    newFiles: toArray(flags['new-files']),
-    flags: flagsFromCli(flags),
-    cwd,
-  });
-  saveState(home, cwd, state);
+  const challenge = withStateLock(home, cwd, (state) =>
+    createChallenge(state, {
+      summary: flags.summary,
+      files,
+      newFiles: toArray(flags['new-files']),
+      flags: flagsFromCli(flags),
+      cwd,
+    }),
+  );
 
   updateStats(home, (stats) => {
     stats.gatesFaced += 1;
@@ -134,19 +134,20 @@ function cmdChallenge(home, cwd, flags) {
 }
 
 function cmdReject(home, cwd, flags) {
-  const { state } = loadState(home, cwd);
-  const result = rejectTeachback(state, { reason: flags.reason });
+  const { result, challengeId, fileCount } = withStateLock(home, cwd, (state) => {
+    const r = rejectTeachback(state, { reason: flags.reason });
+    return { result: r, challengeId: r.ok ? state.challenge.id : null, fileCount: r.ok ? state.challenge.files.length : null };
+  });
   if (!result.ok) return fail(`GATEKEEPER: ${result.error}`);
 
-  saveState(home, cwd, state);
   updateStats(home, (stats) => {
     stats.failedTeachbacks += 1;
   });
   appendEvent(home, {
     type: 'teachback_rejected',
-    challengeId: state.challenge.id,
+    challengeId,
     reason: flags.reason,
-    fileCount: state.challenge.files.length,
+    fileCount,
   });
 
   process.stdout.write(
@@ -155,14 +156,12 @@ function cmdReject(home, cwd, flags) {
 }
 
 function cmdGrant(home, cwd, flags) {
-  const { state } = loadState(home, cwd);
-  const result = grantTeachback(state, { assessment: flags.assessment });
+  const result = withStateLock(home, cwd, (state) => grantTeachback(state, { assessment: flags.assessment }));
   if (!result.ok) {
     fail(result.error);
     return;
   }
 
-  saveState(home, cwd, state);
   updateStats(home, (stats) => {
     stats.gatesPassed += 1;
     stats.totalAttemptsOnPassedGates += result.attempts;
@@ -187,15 +186,15 @@ function cmdRevise(home, cwd, flags) {
     return fail('gatekeeper revise: --files <path...> is required.');
   }
 
-  const { state } = loadState(home, cwd);
-  const result = reviseChallenge(state, {
-    summary: flags.summary,
-    files,
-    newFiles: toArray(flags['new-files']),
-    flags: flagsFromCli(flags),
-    cwd,
-  });
-  saveState(home, cwd, state);
+  const result = withStateLock(home, cwd, (state) =>
+    reviseChallenge(state, {
+      summary: flags.summary,
+      files,
+      newFiles: toArray(flags['new-files']),
+      flags: flagsFromCli(flags),
+      cwd,
+    }),
+  );
 
   updateStats(home, (stats) => {
     // A revision opens a genuinely new challenge (new id, reset counters),
@@ -223,9 +222,7 @@ function cmdRevise(home, cwd, flags) {
 }
 
 function cmdReset(home, cwd) {
-  const { state } = loadState(home, cwd);
-  resetLock(state);
-  saveState(home, cwd, state);
+  withStateLock(home, cwd, (state) => resetLock(state));
   appendEvent(home, { type: 'reset' });
   process.stdout.write('GATEKEEPER: session reset. Gate is locked. History and stats are preserved.\n');
 }
@@ -237,9 +234,7 @@ function cmdReset(home, cwd) {
 // back-to-back by a model with no intervening human message, can succeed.
 function cmdDepart(home, cwd, flags) {
   if (flags.request) {
-    const { state } = loadState(home, cwd);
-    requestDeparture(state);
-    saveState(home, cwd, state);
+    withStateLock(home, cwd, (state) => requestDeparture(state));
     process.stdout.write(
       [
         'GATEKEEPER',
@@ -260,13 +255,11 @@ function cmdDepart(home, cwd, flags) {
   }
 
   if (flags.confirm) {
-    const { state } = loadState(home, cwd);
-    const result = confirmDeparture(state);
+    const result = withStateLock(home, cwd, (state) => confirmDeparture(state));
     if (!result.ok) {
       fail(result.error);
       return;
     }
-    saveState(home, cwd, state);
     updateStats(home, (stats) => {
       stats.explicitDepartures += 1;
     });

@@ -4,6 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { ensureHome } from './state.mjs';
+import { withFileLock } from './lock.mjs';
 
 const STATS_VERSION = 1;
 
@@ -47,9 +48,14 @@ export function saveStats(home, stats) {
   return stats;
 }
 
-// Loads, applies `mutate` in place, persists, and returns the updated stats.
+// Loads, applies `mutate` in place, persists, and returns the updated
+// stats. Locked (hardening P1.1) so two hook processes bumping counters at
+// the same time can't drop one side's increment.
 export function updateStats(home, mutate) {
-  const stats = loadStats(home);
-  mutate(stats);
-  return saveStats(home, stats);
+  ensureHome(home);
+  return withFileLock(statsPath(home), () => {
+    const stats = loadStats(home);
+    mutate(stats);
+    return saveStats(home, stats);
+  });
 }

@@ -14,7 +14,7 @@
 // active gate, per "do not create hostile persistence or block unrelated
 // configuration."
 
-import { resolveHome, loadState, saveState } from '../../core/state.mjs';
+import { resolveHome, loadState } from '../../core/state.mjs';
 import { appendEvent } from '../../core/history.mjs';
 import { updateStats } from '../../core/stats.mjs';
 import { readStdinJson } from './normalize.mjs';
@@ -29,6 +29,10 @@ function main() {
 
   const cwd = input.cwd || process.cwd();
   const home = resolveHome();
+  // Read-only: this adapter never mutates session state, so it neither
+  // needs nor takes the state lock (a needless resave here would itself be
+  // a spurious write racing against a concurrent hook — the opposite of
+  // hardening P1.1's goal).
   const { state } = loadState(home, cwd);
 
   const hasActiveGate = Boolean(state.challenge || state.grant);
@@ -42,8 +46,6 @@ function main() {
       reason: 'Configuration changed while a Gatekeeper challenge/grant was active.',
     });
   }
-
-  saveState(home, cwd, state);
 }
 
 try {

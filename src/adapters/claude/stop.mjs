@@ -11,7 +11,7 @@
 // confirmation, not a full new teach-back, as long as the challenge itself
 // hasn't changed.
 
-import { resolveHome, loadState, saveState } from '../../core/state.mjs';
+import { resolveHome, withStateLock } from '../../core/state.mjs';
 import { revokeGrantIfUsed } from '../../core/engine.mjs';
 import { appendEvent } from '../../core/history.mjs';
 import { readStdinJson } from './normalize.mjs';
@@ -21,12 +21,11 @@ function main() {
   const cwd = input.cwd || process.cwd();
   const home = resolveHome();
 
-  const { state } = loadState(home, cwd);
-  const { revoked, challengeId } = revokeGrantIfUsed(state);
+  const { revoked, challengeId } = withStateLock(home, cwd, (state) => revokeGrantIfUsed(state));
+
   if (revoked) {
     appendEvent(home, { type: 'session_relocked', harness: 'claude', challengeId, reason: 'grant used, turn ended' });
   }
-  saveState(home, cwd, state);
   // Always allow the normal stop; never emit a "continue" decision here.
 }
 

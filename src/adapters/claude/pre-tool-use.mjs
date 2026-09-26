@@ -11,8 +11,7 @@
 // FILE is a different failure domain and fails CLOSED for protected
 // mutation, handled inside state.mjs/engine.mjs.
 
-import { resolveHome } from '../../core/state.mjs';
-import { loadState, saveState } from '../../core/state.mjs';
+import { resolveHome, withStateLock } from '../../core/state.mjs';
 import { observeSession, evaluateFileMutation, evaluateShellCommand } from '../../core/engine.mjs';
 import { appendEvent } from '../../core/history.mjs';
 import {
@@ -30,37 +29,35 @@ function main() {
   const toolInput = input.tool_input || {};
   const home = resolveHome();
 
-  const { state, corrupt } = loadState(home, cwd);
-  const { relocked } = observeSession(state, input.session_id);
+  const { result, corrupt, relocked } = withStateLock(home, cwd, (state, isCorrupt) => {
+    const { relocked: didRelock } = observeSession(state, input.session_id);
+
+    if (toolName === 'Edit' || toolName === 'Write' || toolName === 'MultiEdit') {
+      const targetFiles = extractTargetFiles(toolName, toolInput);
+      if (targetFiles.length === 0) {
+        return { result: null, corrupt: isCorrupt, relocked: didRelock };
+      }
+      return { result: evaluateFileMutation(state, targetFiles, cwd), corrupt: isCorrupt, relocked: didRelock };
+    }
+    if (toolName === 'Bash' || toolName === 'PowerShell') {
+      const command = toolInput.command;
+      return { result: evaluateShellCommand(state, command, shellFor(toolName)), corrupt: isCorrupt, relocked: didRelock };
+    }
+    return { result: null, corrupt: isCorrupt, relocked: didRelock };
+  });
+
   if (relocked) {
     appendEvent(home, { type: 'session_relocked', harness: 'claude' });
   }
 
-  let result;
-  if (toolName === 'Edit' || toolName === 'Write' || toolName === 'MultiEdit') {
-    const targetFiles = extractTargetFiles(toolName, toolInput);
-    if (targetFiles.length === 0) {
-      saveState(home, cwd, state);
-      return; // nothing to evaluate; let Claude Code's normal flow handle it
-    }
-    result = evaluateFileMutation(state, targetFiles, cwd);
-  } else if (toolName === 'Bash' || toolName === 'PowerShell') {
-    const command = toolInput.command;
-    result = evaluateShellCommand(state, command, shellFor(toolName));
-  } else {
-    saveState(home, cwd, state);
-    return;
-  }
-
-  saveState(home, cwd, state);
-
-  if (!result.allowed) {
+  if (result && !result.allowed) {
     const suffix = corrupt
       ? ' (a previous Gatekeeper state file was unreadable; treated as locked)'
       : '';
     printJson(denyResponse('PreToolUse', `${result.reason}${suffix}`));
   }
-  // allowed: print nothing, exit 0 — no Gatekeeper decision, normal flow proceeds.
+  // allowed (or nothing to evaluate): print nothing, exit 0 — no Gatekeeper
+  // decision, Claude Code's normal permission flow proceeds.
 }
 
 try {
