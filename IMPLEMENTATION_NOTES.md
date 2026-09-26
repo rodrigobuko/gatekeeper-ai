@@ -184,6 +184,16 @@ rather than staying open indefinitely.
 
 ## 7. Better ways to handle the main objective (if this goes past v0.1)
 
+**Update after the hardening pass:** a follow-up directive acted on several of these — #1 (lightweight
+re-confirmation for continuation, kept per-turn revocation as the default per its own explicit decision
+rule), #2 (complexity now includes directories-crossed and new-exports signals), and #6 (`gatekeeper diff`
+against a captured Git baseline) are now implemented; see the git log for `feat: P1.2-...` and
+`feat: complexity signals expansion...`. #3 (shell scope-checking) and #5 (no concurrency lock) were also
+addressed differently than proposed below — #5 got a real dependency-free lock (`src/core/lock.mjs`), and
+#3 remains open (shell mutation still isn't scope-checked once granted) but is now tracked as a roadmap
+issue rather than left implicit. #4 (pre-push gate) is still explicitly future work. The text below is left
+as originally written, as the historical record of what was proposed and why.
+
 These are opinions, not requests from the directive — flagging them as things I'd raise before building,
 not things I built without asking.
 
