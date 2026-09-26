@@ -163,7 +163,7 @@ test('a new session id in the same directory re-locks a stale challenge', () => 
 
   runNodeScript(PRE_TOOL_USE_PATH, { input: preToolUseInput({ cwd, sessionId: 'session-A', toolName: 'Edit', toolInput: { file_path: filePath, old_string: 'a', new_string: 'b' } }), cwd, home });
   runCli(['challenge', '--summary', 'x', '--files', filePath], { cwd, home });
-  runNodeScript(USER_PROMPT_SUBMIT_PATH, { input: userPromptSubmitInput({ cwd, sessionId: 'session-A', prompt: 'answer' }), cwd, home });
+  runNodeScript(USER_PROMPT_SUBMIT_PATH, { input: userPromptSubmitInput({ cwd, sessionId: 'session-A', prompt: 'This is a real explanation of the approved behavior in my own words.' }), cwd, home });
   runCli(['grant', '--assessment', 'ok'], { cwd, home });
 
   const status1 = runCli(['status'], { cwd, home });

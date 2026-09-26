@@ -17,7 +17,11 @@ test('a normal response after a challenge makes the developer eligible for grant
   const filePath = `${cwd}/src/user.ts`;
 
   runCli(['challenge', '--summary', 'x', '--files', filePath], { cwd, home });
-  runNodeScript(USER_PROMPT_SUBMIT_PATH, { input: userPromptSubmitInput({ cwd, sessionId, prompt: 'Real explanation.' }), cwd, home });
+  runNodeScript(USER_PROMPT_SUBMIT_PATH, {
+    input: userPromptSubmitInput({ cwd, sessionId, prompt: 'This is a real explanation of the approved behavior in my own words.' }),
+    cwd,
+    home,
+  });
 
   const grant = runCli(['grant', '--assessment', 'ok'], { cwd, home });
   assert.equal(grant.status, 0);

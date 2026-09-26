@@ -100,7 +100,7 @@ test('scope expansion: revise is required before an out-of-scope file can be tou
   const schemaFile = `${cwd}/src/db/schema.ts`;
 
   runCli(['challenge', '--summary', 'Add cache', '--files', userFile], { cwd, home });
-  runNodeScript(USER_PROMPT_SUBMIT_PATH, { input: userPromptSubmitInput({ cwd, sessionId, prompt: 'answer' }), cwd, home });
+  runNodeScript(USER_PROMPT_SUBMIT_PATH, { input: userPromptSubmitInput({ cwd, sessionId, prompt: 'This is a real explanation of the approved behavior in my own words.' }), cwd, home });
   runCli(['grant', '--assessment', 'ok'], { cwd, home });
 
   // G. scope expansion: schema.ts was never approved.
@@ -155,13 +155,60 @@ test('conversational bypass never opens the gate, and is tracked separately from
   assert.match(history.stdout, /Override attempt/);
 });
 
-test('explicit departure requires --confirm and is tracked separately, with no YOU ARE WORTHY', () => {
+test('two-stage departure: bare depart fails, confirm without a request fails', () => {
   const home = makeTempHome();
   const cwd = makeTempProject();
+
+  const bare = runCli(['depart'], { cwd, home });
+  assert.equal(bare.status, 1);
+
+  const confirmWithoutRequest = runCli(['depart', '--confirm'], { cwd, home });
+  assert.equal(confirmWithoutRequest.status, 1);
+});
+
+test('two-stage departure: confirm right after request, with no intervening user message, fails', () => {
+  const home = makeTempHome();
+  const cwd = makeTempProject();
+
+  const request = runCli(['depart', '--request'], { cwd, home });
+  assert.equal(request.status, 0);
+  assert.match(request.stdout, /DEPART GATEKEEPER/);
+
+  // A model calling --confirm immediately, with no real human message in
+  // between, must not succeed — confirmedByUser can only come from the
+  // UserPromptSubmit hook observing an actual user message.
+  const prematureConfirm = runCli(['depart', '--confirm'], { cwd, home });
+  assert.equal(prematureConfirm.status, 1);
+});
+
+test('two-stage departure: a normal user message does not confirm departure', () => {
+  const home = makeTempHome();
+  const cwd = makeTempProject();
+  const sessionId = nextSessionId();
+
+  runCli(['depart', '--request'], { cwd, home });
+  runNodeScript(USER_PROMPT_SUBMIT_PATH, {
+    input: userPromptSubmitInput({ cwd, sessionId, prompt: 'actually wait, can we keep it on for now' }),
+    cwd,
+    home,
+  });
+
+  const confirm = runCli(['depart', '--confirm'], { cwd, home });
+  assert.equal(confirm.status, 1);
+});
+
+test('two-stage departure: the exact confirmation phrase via UserPromptSubmit, then --confirm, succeeds', () => {
+  const home = makeTempHome();
+  const cwd = makeTempProject();
+  const sessionId = nextSessionId();
   const filePath = `${cwd}/src/user.ts`;
 
-  const unconfirmed = runCli(['depart'], { cwd, home });
-  assert.equal(unconfirmed.status, 1);
+  runCli(['depart', '--request'], { cwd, home });
+  runNodeScript(USER_PROMPT_SUBMIT_PATH, {
+    input: userPromptSubmitInput({ cwd, sessionId, prompt: 'DEPART GATEKEEPER' }),
+    cwd,
+    home,
+  });
 
   const departed = runCli(['depart', '--confirm'], { cwd, home });
   assert.equal(departed.status, 0);
@@ -175,8 +222,11 @@ test('explicit departure requires --confirm and is tracked separately, with no Y
   });
   assert.equal(allowed.stdout.trim(), '');
 
+  // Departure is tracked distinctly from gate pass/failure stats.
   const stats = runCli(['stats'], { cwd, home });
   assert.match(stats.stdout, /Explicit departures:\s+1/);
+  assert.match(stats.stdout, /Gates passed:\s+0/);
+  assert.match(stats.stdout, /Unsuccessful teach-backs:\s+0/);
 });
 
 test('a large file count triggers the simplicity/high-complexity signal in the challenge output', () => {

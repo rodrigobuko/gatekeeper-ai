@@ -19,7 +19,8 @@ import {
   grantTeachback,
   reviseChallenge,
   resetLock,
-  depart,
+  requestDeparture,
+  confirmDeparture,
   currentGrant,
 } from '../core/engine.mjs';
 import { appendEvent, readHistory, SYMBOLS } from '../core/history.mjs';
@@ -229,25 +230,57 @@ function cmdReset(home, cwd) {
   process.stdout.write('GATEKEEPER: session reset. Gate is locked. History and stats are preserved.\n');
 }
 
+// Two-stage mechanical departure (hardening P0.6): --request only ever sets
+// departure.pending; --confirm only ever succeeds if a REAL human message
+// already set departure.confirmedByUser via the UserPromptSubmit hook (see
+// adapters/claude/user-prompt-submit.mjs). Neither flag alone, nor both run
+// back-to-back by a model with no intervening human message, can succeed.
 function cmdDepart(home, cwd, flags) {
-  if (!flags.confirm) {
-    return fail(
-      'GATEKEEPER: departure requires explicit confirmation. Re-run with --confirm after the developer has confirmed in conversation.',
+  if (flags.request) {
+    const { state } = loadState(home, cwd);
+    requestDeparture(state);
+    saveState(home, cwd, state);
+    process.stdout.write(
+      [
+        'GATEKEEPER',
+        '',
+        'The Gatekeeper prepares to return to the Astral Lands.',
+        '',
+        'Without the Gatekeeper:',
+        '- protected mutation will no longer require comprehension',
+        '- the active challenge will be abandoned',
+        '- you are choosing to continue without the gate',
+        '',
+        'If you are certain, reply exactly:',
+        '',
+        'DEPART GATEKEEPER',
+      ].join('\n') + '\n',
     );
+    return;
   }
-  const { state } = loadState(home, cwd);
-  depart(state);
-  saveState(home, cwd, state);
-  updateStats(home, (stats) => {
-    stats.explicitDepartures += 1;
-  });
-  appendEvent(home, { type: 'departure' });
 
-  process.stdout.write(
-    ['GATEKEEPER', '', 'The Gatekeeper returns to the Astral Lands.', '', 'The gate is unguarded.', 'You may proceed in unworthiness.'].join(
-      '\n',
-    ) + '\n',
-  );
+  if (flags.confirm) {
+    const { state } = loadState(home, cwd);
+    const result = confirmDeparture(state);
+    if (!result.ok) {
+      fail(result.error);
+      return;
+    }
+    saveState(home, cwd, state);
+    updateStats(home, (stats) => {
+      stats.explicitDepartures += 1;
+    });
+    appendEvent(home, { type: 'departure' });
+
+    process.stdout.write(
+      ['GATEKEEPER', '', 'The Gatekeeper returns to the Astral Lands.', '', 'The gate is unguarded.', 'You may proceed in unworthiness.'].join(
+        '\n',
+      ) + '\n',
+    );
+    return;
+  }
+
+  fail('gatekeeper depart: pass --request to start, or --confirm once the developer has replied "DEPART GATEKEEPER".');
 }
 
 function cmdStatus(home, cwd) {
@@ -272,6 +305,9 @@ function cmdStatus(home, cwd) {
     lines.push(`Failed teach-backs: ${state.challenge.failedTeachbacks}`);
   } else {
     lines.push('Phase: LOCKED (no active challenge)');
+  }
+  if (state.departure && state.departure.pending) {
+    lines.push('', `Departure requested, awaiting confirmation phrase (confirmed: ${state.departure.confirmedByUser}).`);
   }
   process.stdout.write(`${lines.join('\n')}\n`);
 }
@@ -363,7 +399,8 @@ function printUsage() {
       '  grant --assessment <a>        Open the gate for the active challenge',
       '  revise --summary <s> --files <f...>      Replace the active challenge (scope/plan change)',
       '  reset                         Re-lock this session without touching history/stats',
-      '  depart --confirm              Explicit, user-confirmed departure (skill-only)',
+      '  depart --request               Start departure (asks for the exact confirmation phrase)',
+      '  depart --confirm               Finish departure (requires the phrase to have been sent)',
       '  stats                         Show aggregate counters',
       '  history [--limit N]           Show recent events',
       '  version                       Print the installed version',

@@ -25,7 +25,7 @@ test('a grant that was used to mutate during the turn is revoked at Stop', () =>
   const filePath = `${cwd}/src/user.ts`;
 
   runCli(['challenge', '--summary', 'x', '--files', filePath], { cwd, home });
-  runNodeScript(USER_PROMPT_SUBMIT_PATH, { input: userPromptSubmitInput({ cwd, sessionId, prompt: 'answer' }), cwd, home });
+  runNodeScript(USER_PROMPT_SUBMIT_PATH, { input: userPromptSubmitInput({ cwd, sessionId, prompt: 'This is a real explanation of the approved behavior in my own words.' }), cwd, home });
   runCli(['grant', '--assessment', 'ok'], { cwd, home });
 
   // The grant is used to perform the approved edit.
@@ -49,7 +49,7 @@ test('an unused grant (no mutation happened) survives Stop', () => {
   const filePath = `${cwd}/src/user.ts`;
 
   runCli(['challenge', '--summary', 'x', '--files', filePath], { cwd, home });
-  runNodeScript(USER_PROMPT_SUBMIT_PATH, { input: userPromptSubmitInput({ cwd, sessionId, prompt: 'answer' }), cwd, home });
+  runNodeScript(USER_PROMPT_SUBMIT_PATH, { input: userPromptSubmitInput({ cwd, sessionId, prompt: 'This is a real explanation of the approved behavior in my own words.' }), cwd, home });
   runCli(['grant', '--assessment', 'ok'], { cwd, home });
 
   runNodeScript(STOP_PATH, { input: stopInput({ cwd, sessionId }), cwd, home });

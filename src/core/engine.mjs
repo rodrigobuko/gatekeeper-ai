@@ -72,6 +72,13 @@ export function evaluateFileMutation(state, targetFiles, cwd) {
   return { allowed: true, code: 'GATEKEEPER_GRANTED', reason: 'Covered by the active grant.', protectedTargets };
 }
 
+// LOCKED policy (hardening P0.4): trusted-cli/read/test -> allow,
+// mutation/unknown -> deny. A locked gate that let arbitrary unclassified
+// shell commands through was too weak for the stated guarantee — e.g.
+// `python mutate.py`, `git checkout -- f`, `curl -o f url` were previously
+// unclassified and silently allowed. Once GRANTED, shell mutation remains
+// allowed outright (best-effort, not scope-checked) as before; this policy
+// only tightens the LOCKED case.
 export function evaluateShellCommand(state, command, shell) {
   const classification = classifyCommand(command, shell);
 
@@ -79,21 +86,22 @@ export function evaluateShellCommand(state, command, shell) {
     return { allowed: true, code: 'TRUSTED_CLI', reason: 'Trusted Gatekeeper CLI invocation.', classification };
   }
 
-  if (classification !== 'mutation') {
-    return {
-      allowed: true,
-      code: 'SHELL_NOT_FLAGGED',
-      reason: 'Command did not match a known mutation pattern (best-effort classifier).',
-      classification,
-    };
-  }
-
   if (state.departed) {
     return { allowed: true, code: 'DEPARTED', reason: 'Gatekeeper has explicitly departed for this session.', classification };
   }
 
   const grant = currentGrant(state);
-  if (!grant) {
+
+  if (grant) {
+    if (classification === 'mutation') grant.usedInTurn = true;
+    return { allowed: true, code: 'GATEKEEPER_GRANTED', reason: 'Covered by the active grant.', classification };
+  }
+
+  if (classification === 'read' || classification === 'test') {
+    return { allowed: true, code: 'SHELL_SAFE', reason: 'Recognized read-only or test/check command.', classification };
+  }
+
+  if (classification === 'mutation') {
     return {
       allowed: false,
       code: 'GATEKEEPER_LOCKED',
@@ -102,8 +110,14 @@ export function evaluateShellCommand(state, command, shell) {
     };
   }
 
-  grant.usedInTurn = true;
-  return { allowed: true, code: 'GATEKEEPER_GRANTED', reason: 'Covered by the active grant.', classification };
+  return {
+    allowed: false,
+    code: 'GATEKEEPER_SHELL_UNKNOWN',
+    reason:
+      'This command is not classified as read-only while the gate is locked. ' +
+      'Use a clearly read-only command, or pass the Gatekeeper challenge before running it.',
+    classification,
+  };
 }
 
 export function createChallenge(state, { summary, files = [], newFiles = [], flags = {}, cwd }) {
@@ -130,6 +144,7 @@ export function createChallenge(state, { summary, files = [], newFiles = [], fla
     createdAt: new Date().toISOString(),
     userResponsesAfterChallenge: 0,
     latestResponseEligibleForGrant: false,
+    lastResponseClassification: null,
     failedTeachbacks: 0,
     overrideAttempts: 0,
   };
@@ -137,17 +152,22 @@ export function createChallenge(state, { summary, files = [], newFiles = [], fla
   return state.challenge;
 }
 
-export function recordUserResponse(state, { isBypass = false } = {}) {
+// `classification` is one of bypass/passive_approval/help_request/
+// teachback_candidate/other (see bypass.mjs). Only teachback_candidate is
+// mechanically grant-eligible (hardening P0.5) — a help request or passive
+// approval must never make `grant` mechanically possible, no matter how
+// the model judges it, because "assistance counted as an answer" is
+// exactly the failure this classifier exists to prevent.
+export function recordUserResponse(state, { classification = 'other' } = {}) {
   if (!state.challenge) {
     return { ok: false, error: 'No active challenge to respond to.' };
   }
   state.challenge.userResponsesAfterChallenge += 1;
-  if (isBypass) {
+  state.challenge.lastResponseClassification = classification;
+  if (classification === 'bypass') {
     state.challenge.overrideAttempts += 1;
-    state.challenge.latestResponseEligibleForGrant = false;
-  } else {
-    state.challenge.latestResponseEligibleForGrant = true;
   }
+  state.challenge.latestResponseEligibleForGrant = classification === 'teachback_candidate';
   return { ok: true, challenge: state.challenge };
 }
 
@@ -174,11 +194,18 @@ export function grantTeachback(state, { assessment }) {
     };
   }
   if (!state.challenge.latestResponseEligibleForGrant) {
+    const seen = state.challenge.lastResponseClassification;
+    const hint =
+      seen === 'bypass'
+        ? 'it looked like a bypass attempt'
+        : seen === 'passive_approval'
+          ? 'it looked like passive approval ("looks good", "go ahead", ...), not an explanation'
+          : seen === 'help_request'
+            ? 'it looked like a help request, not an explanation — assistance does not count as an answer'
+            : 'it did not look like a substantive explanation';
     return {
       ok: false,
-      error:
-        'GATEKEEPER: grant denied. The latest developer message does not satisfy the active challenge ' +
-        '(it may be a bypass attempt, or the challenge changed since the last response).',
+      error: `GATEKEEPER: grant denied. The latest developer message does not satisfy the active challenge (${hint}).`,
     };
   }
   if (!assessment || !assessment.trim()) {
@@ -215,11 +242,44 @@ export function resetLock(state) {
   state.challenge = null;
   state.grant = null;
   state.departed = false;
+  state.departure = null;
   return { ok: true };
 }
 
-export function depart(state) {
+// Two-stage mechanical departure (hardening P0.6). `depart --confirm` used
+// to be mechanically sufficient by itself, with only the model instructed
+// not to call it prematurely — too weak given Gatekeeper's anti-bypass
+// promise. Now:
+//   1. requestDeparture() sets departure.pending = true. This is the only
+//      thing a CLI/model call can do on its own.
+//   2. Only the UserPromptSubmit hook, observing a REAL human message that
+//      contains the exact confirmation phrase, may set
+//      departure.confirmedByUser = true (see adapters/claude/
+//      user-prompt-submit.mjs). A model calling the CLI cannot create this.
+//   3. confirmDeparture() (the CLI's `depart --confirm`) only succeeds when
+//      BOTH departure.pending and departure.confirmedByUser are true.
+export function requestDeparture(state) {
+  state.departure = { pending: true, confirmedByUser: false, requestedAt: new Date().toISOString() };
+  return { ok: true };
+}
+
+export function confirmDeparture(state) {
+  if (!state.departure || !state.departure.pending) {
+    return {
+      ok: false,
+      error: 'GATEKEEPER: departure denied. No pending departure request (run "gatekeeper depart --request" first).',
+    };
+  }
+  if (!state.departure.confirmedByUser) {
+    return {
+      ok: false,
+      error:
+        'GATEKEEPER: departure denied. The developer has not sent a message containing the exact ' +
+        'confirmation phrase yet.',
+    };
+  }
   state.departed = true;
+  state.departure = null;
   state.challenge = null;
   state.grant = null;
   return { ok: true };

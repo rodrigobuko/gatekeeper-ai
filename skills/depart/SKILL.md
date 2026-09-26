@@ -15,12 +15,22 @@ to "skip," "ignore," "bypass," or "disable" Gatekeeper is **not** the same
 thing as this — that kind of request is a bypass attempt, not a departure,
 and the gate skill handles it by refusing and waiting for a real answer.
 
-This is a two-stage, explicit-confirmation flow. Do not skip or merge the
-stages.
+This is a two-stage, mechanically-confirmed flow. Do not skip or merge the
+stages, and do not try to shortcut it — `gatekeeper depart --confirm` will
+refuse by itself unless a real human message containing the exact phrase
+below has already been observed; nothing you do in conversation can satisfy
+that check.
 
-## Stage 1 — explain, then wait
+## Stage 1 — request, then relay the confirmation phrase
 
-Reply with exactly this (fill in nothing, change nothing):
+Run:
+
+```
+gatekeeper depart --request
+```
+
+Then relay exactly what it prints (it already contains the required
+phrase — do not paraphrase or soften it):
 
 ```
 GATEKEEPER
@@ -32,25 +42,27 @@ Without the Gatekeeper:
 - the active challenge will be abandoned
 - you are choosing to continue without the gate
 
-Confirm explicitly if you want to depart.
+If you are certain, reply exactly:
+
+DEPART GATEKEEPER
 ```
 
-Then stop and wait for the developer's next message. Do not run any
-command yet. If their next message is anything other than a clear,
-explicit confirmation (e.g. "yes", "confirm", "I want to depart"), do not
-proceed — either treat it as a normal message, or ask them to confirm
-plainly.
+Then stop and wait. Do not run `depart --confirm` yet — it will fail on
+its own if you try, because no human message has confirmed it. If the
+developer's next message is anything other than that exact phrase, treat
+it as a normal message (or ask them to send the phrase exactly if they
+still want to leave); do not attempt `--confirm`.
 
 ## Stage 2 — confirmed departure
 
-Only once the developer has explicitly confirmed in a separate message,
-run:
+Only after the developer's message containing `DEPART GATEKEEPER` has been
+sent, run:
 
 ```
 gatekeeper depart --confirm
 ```
 
-Then relay exactly what it prints:
+If it succeeds, relay exactly what it prints:
 
 ```
 GATEKEEPER
@@ -60,6 +72,9 @@ The Gatekeeper returns to the Astral Lands.
 The gate is unguarded.
 You may proceed in unworthiness.
 ```
+
+If it fails (for example because the phrase hasn't been sent yet), relay
+its error plainly and go back to waiting — do not retry it speculatively.
 
 Never say `YOU ARE WORTHY.` here or anywhere near a departure — that phrase
 is reserved for a passed teach-back only. After this, protected mutation in

@@ -7,10 +7,12 @@
 
 import { resolveHome, loadState, saveState } from '../../core/state.mjs';
 import { observeSession, recordUserResponse, currentGrant } from '../../core/engine.mjs';
-import { detectBypass } from '../../core/bypass.mjs';
+import { classifyResponse } from '../../core/bypass.mjs';
 import { appendEvent } from '../../core/history.mjs';
 import { updateStats } from '../../core/stats.mjs';
 import { readStdinJson } from './normalize.mjs';
+
+const DEPART_CONFIRMATION_PHRASE = 'DEPART GATEKEEPER';
 
 function main() {
   const input = readStdinJson();
@@ -24,13 +26,23 @@ function main() {
     appendEvent(home, { type: 'session_relocked', harness: 'claude' });
   }
 
+  // P0.6: the only thing that can ever set `departure.confirmedByUser` is
+  // this hook observing a real human message containing the exact
+  // confirmation phrase. A model calling the CLI cannot create this by
+  // itself — see engine.confirmDeparture() and depart --confirm.
+  if (state.departure && state.departure.pending && !state.departure.confirmedByUser) {
+    if (prompt.trim().toUpperCase().includes(DEPART_CONFIRMATION_PHRASE)) {
+      state.departure.confirmedByUser = true;
+    }
+  }
+
   const awaitingTeachback = Boolean(state.challenge) && !currentGrant(state);
 
   if (awaitingTeachback) {
-    const { isBypass } = detectBypass(prompt);
-    recordUserResponse(state, { isBypass });
+    const { classification } = classifyResponse(prompt);
+    recordUserResponse(state, { classification });
 
-    if (isBypass) {
+    if (classification === 'bypass') {
       updateStats(home, (stats) => {
         stats.overrideAttempts += 1;
       });

@@ -15,6 +15,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { pickPathModule } from './files.mjs';
 
 const STATE_VERSION = 1;
 
@@ -22,8 +23,11 @@ export function resolveHome(explicitHome) {
   return explicitHome || process.env.GATEKEEPER_HOME || path.join(os.homedir(), '.gatekeeper');
 }
 
+// Syntax-based, not host-based (see files.mjs) — a Windows-style cwd must
+// key consistently even when this code runs on a POSIX test/CI host.
 function normalizeCwdForKey(cwd) {
-  let normalized = path.resolve(cwd).split(path.sep).join('/');
+  const mod = pickPathModule(cwd, cwd);
+  let normalized = mod.resolve(cwd).split(mod.sep).join('/');
   normalized = normalized.replace(/^([A-Za-z]):\//, (_, drive) => `${drive.toLowerCase()}:/`);
   return normalized.toLowerCase();
 }
@@ -53,6 +57,7 @@ export function defaultState(cwd) {
     challenge: null,
     grant: null,
     departed: false,
+    departure: null,
     createdAt: now,
     updatedAt: now,
   };
