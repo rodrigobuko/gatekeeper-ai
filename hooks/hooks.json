@@ -69,6 +69,20 @@
           }
         ]
       }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/src/adapters/claude/session-start.mjs"
+            ],
+            "timeout": 10
+          }
+        ]
+      }
     ]
   }
 }

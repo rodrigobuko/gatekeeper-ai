@@ -147,6 +147,7 @@ export function createChallenge(state, { summary, files = [], newFiles = [], fla
     lastResponseClassification: null,
     failedTeachbacks: 0,
     overrideAttempts: 0,
+    hasBeenGranted: false,
   };
   state.grant = null;
   return state.challenge;
@@ -183,6 +184,19 @@ export function rejectTeachback(state, { reason }) {
   return { ok: true, challenge: state.challenge };
 }
 
+// P1.2 grant-lifetime decision: kept per-turn revocation (revokeGrantIfUsed,
+// called from Stop) as the conservative default — see README for the
+// alternative considered and why it was rejected. The one relaxation made
+// here targets its main usability cost: a multi-turn implementation of the
+// SAME, unchanged, already-explained challenge would otherwise need a full
+// fresh comprehension check on every single turn. Once a challenge has been
+// granted once (a real teachback_candidate response was required for that),
+// a later re-grant for that SAME challenge id only requires a real human
+// message that isn't a bypass attempt — not a full re-explanation. This
+// never weakens the original guarantee (bypass still always fails, and a
+// brand-new challenge/revise always resets `hasBeenGranted` to false, so an
+// unrelated task can never inherit a lightweight re-grant), and it never
+// skips the human-turn requirement (a message must still have been sent).
 export function grantTeachback(state, { assessment }) {
   if (!state.challenge) {
     return { ok: false, error: 'GATEKEEPER: grant denied. There is no active challenge for this session.' };
@@ -193,8 +207,12 @@ export function grantTeachback(state, { assessment }) {
       error: 'GATEKEEPER: grant denied.\nThe developer has not responded to the active challenge.',
     };
   }
-  if (!state.challenge.latestResponseEligibleForGrant) {
-    const seen = state.challenge.lastResponseClassification;
+
+  const isContinuation = state.challenge.hasBeenGranted === true;
+  const seen = state.challenge.lastResponseClassification;
+  const eligible = isContinuation ? seen !== 'bypass' : state.challenge.latestResponseEligibleForGrant;
+
+  if (!eligible) {
     const hint =
       seen === 'bypass'
         ? 'it looked like a bypass attempt'
@@ -213,6 +231,7 @@ export function grantTeachback(state, { assessment }) {
   }
 
   const attempts = state.challenge.failedTeachbacks + 1;
+  state.challenge.hasBeenGranted = true;
   state.grant = {
     challengeId: state.challenge.id,
     files: state.challenge.files,

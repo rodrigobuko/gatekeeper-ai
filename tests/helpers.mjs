@@ -12,6 +12,7 @@ export const PRE_TOOL_USE_PATH = path.join(REPO_ROOT, 'src', 'adapters', 'claude
 export const USER_PROMPT_SUBMIT_PATH = path.join(REPO_ROOT, 'src', 'adapters', 'claude', 'user-prompt-submit.mjs');
 export const STOP_PATH = path.join(REPO_ROOT, 'src', 'adapters', 'claude', 'stop.mjs');
 export const CONFIG_CHANGE_PATH = path.join(REPO_ROOT, 'src', 'adapters', 'claude', 'config-change.mjs');
+export const SESSION_START_PATH = path.join(REPO_ROOT, 'src', 'adapters', 'claude', 'session-start.mjs');
 
 export function makeTempHome() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'gatekeeper-home-'));
@@ -70,6 +71,17 @@ export function userPromptSubmitInput({ cwd, sessionId, prompt }) {
     hook_event_name: 'UserPromptSubmit',
     prompt,
     prompt_index: 0,
+  };
+}
+
+export function sessionStartInput({ cwd, sessionId, reason = 'startup' }) {
+  return {
+    session_id: sessionId,
+    transcript_path: path.join(cwd, 'transcript.jsonl'),
+    cwd,
+    permission_mode: 'default',
+    hook_event_name: 'SessionStart',
+    reason,
   };
 }
 

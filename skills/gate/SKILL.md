@@ -129,6 +129,21 @@ developer's behalf.
     persistence story, or a new public API — stop, explain the drift, and go
     to the next section instead of editing anyway.
 
+## Continuing the same approved work across turns
+
+The grant is revoked at the end of every turn in which it was used (so an
+unrelated later task never silently inherits it) — this means a multi-turn
+implementation of the SAME approved change will hit the gate again on its
+next protected mutation. This is expected, not a bug, and it is not a full
+new teach-back: once a challenge has been granted once, Gatekeeper only
+needs one more real, non-bypass message from the developer to re-grant the
+identical challenge — not another explanation. Ask something quick like
+*"Continuing the same approved cache change — anything changed, or should I
+keep going?"* and, once they've replied at all (even briefly, as long as
+it isn't a bypass attempt), call `gatekeeper grant` again with a short
+assessment. If the plan itself changed, that's drift — go to the next
+section and revise instead.
+
 ## Scope changes and plan drift
 
 If the implementation needs to grow beyond the granted scope — a new file,

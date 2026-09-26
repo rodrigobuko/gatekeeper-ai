@@ -276,8 +276,42 @@ function cmdDepart(home, cwd, flags) {
   fail('gatekeeper depart: pass --request to start, or --confirm once the developer has replied "DEPART GATEKEEPER".');
 }
 
-function cmdStatus(home, cwd) {
+// P1.4: stable, machine-readable status for status-line/IDE integrations
+// and debug tooling. No secrets, no full prompts — the same compact-metadata
+// discipline as history.mjs.
+function statusToJson(state, corrupt) {
+  const grant = currentGrant(state);
+  let phase = 'locked';
+  if (state.departed) phase = 'departed';
+  else if (grant) phase = 'granted';
+  else if (state.challenge) phase = 'challenge';
+
+  return {
+    version: 1,
+    phase,
+    corrupt,
+    challengeId: state.challenge ? state.challenge.id : null,
+    summary: state.challenge ? state.challenge.summary : null,
+    fileCount: state.challenge ? state.challenge.files.length : grant ? grant.files.length : 0,
+    responses: state.challenge ? state.challenge.userResponsesAfterChallenge : 0,
+    latestResponseEligibleForGrant: state.challenge ? state.challenge.latestResponseEligibleForGrant : false,
+    failedTeachbacks: state.challenge ? state.challenge.failedTeachbacks : 0,
+    overrideAttempts: state.challenge ? state.challenge.overrideAttempts : 0,
+    requiresSimplicityChallenge: state.challenge ? state.challenge.complexity.requiresSimplicityChallenge : false,
+    grantedAt: grant ? grant.grantedAt : null,
+    departurePending: Boolean(state.departure && state.departure.pending),
+    departureConfirmed: Boolean(state.departure && state.departure.confirmedByUser),
+  };
+}
+
+function cmdStatus(home, cwd, flags) {
   const { state, corrupt } = loadState(home, cwd);
+
+  if (flags.json) {
+    process.stdout.write(`${JSON.stringify(statusToJson(state, corrupt))}\n`);
+    return;
+  }
+
   const grant = currentGrant(state);
   const lines = ['GATEKEEPER STATUS', ''];
   if (corrupt) lines.push('WARNING: previous state file was unreadable; a fresh locked state was used.', '');
@@ -386,7 +420,8 @@ function printUsage() {
       'Usage: gatekeeper <command> [options]',
       '',
       'Commands:',
-      '  status                        Show the current gate phase for this directory',
+      '  status [--json]                Show the current gate phase for this directory',
+      '  doctor [--json]                 Safe environment diagnostics for bug reports',
       '  challenge --summary <s> --files <f...>   Open a challenge (locks protected mutation)',
       '  reject --reason <r>           Record an insufficient teach-back',
       '  grant --assessment <a>        Open the gate for the active challenge',
@@ -408,7 +443,7 @@ function main() {
 
   switch (command) {
     case 'status':
-      return cmdStatus(home, cwd);
+      return cmdStatus(home, cwd, flags);
     case 'challenge':
       return cmdChallenge(home, cwd, flags);
     case 'reject':

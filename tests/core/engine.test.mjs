@@ -375,3 +375,49 @@ test('an unused grant is not revoked at Stop time', () => {
   assert.equal(revoked, false);
   assert.notEqual(currentGrant(state), null);
 });
+
+// --- P1.2: lightweight re-confirmation for continuation, not a full retry -
+
+test('re-granting the SAME already-granted challenge only needs a non-bypass response', () => {
+  const state = challengeState({ files: ['src/user.ts'] });
+  recordUserResponse(state, { classification: 'teachback_candidate' });
+  const first = grantTeachback(state, { assessment: 'Explained the invalidation flow.' });
+  assert.equal(first.ok, true);
+
+  evaluateFileMutation(state, ['src/user.ts'], CWD); // marks usedInTurn
+  revokeGrantIfUsed(state); // Stop: grant revoked, challenge itself is untouched
+
+  // The next turn opens with an ordinary message ("continue"), not a
+  // fresh explanation — this must still be enough to re-grant the SAME
+  // challenge, because comprehension was already demonstrated once.
+  recordUserResponse(state, { classification: 'other' });
+  const second = grantTeachback(state, { assessment: 'Still the same approved change.' });
+  assert.equal(second.ok, true);
+});
+
+test('a bypass attempt still cannot re-grant an already-granted challenge', () => {
+  const state = challengeState({ files: ['src/user.ts'] });
+  recordUserResponse(state, { classification: 'teachback_candidate' });
+  grantTeachback(state, { assessment: 'ok' });
+  evaluateFileMutation(state, ['src/user.ts'], CWD);
+  revokeGrantIfUsed(state);
+
+  recordUserResponse(state, { classification: 'bypass' });
+  const result = grantTeachback(state, { assessment: 'ok' });
+  assert.equal(result.ok, false);
+});
+
+test('a brand-new challenge after revise cannot use the lightweight continuation path', () => {
+  const state = challengeState({ files: ['src/user.ts'] });
+  recordUserResponse(state, { classification: 'teachback_candidate' });
+  grantTeachback(state, { assessment: 'ok' });
+
+  reviseChallenge(state, { summary: 'expanded', files: ['src/user.ts', 'src/other.ts'], cwd: CWD });
+  assert.equal(state.challenge.hasBeenGranted, false);
+
+  // A passive/ambiguous response is not enough for a NEW challenge, even
+  // though the previous one had already been granted.
+  recordUserResponse(state, { classification: 'other' });
+  const result = grantTeachback(state, { assessment: 'ok' });
+  assert.equal(result.ok, false);
+});

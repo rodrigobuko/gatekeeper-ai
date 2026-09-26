@@ -239,3 +239,20 @@ test('a large file count triggers the simplicity/high-complexity signal in the c
   const stats = runCli(['stats'], { cwd, home });
   assert.match(stats.stdout, /Simplicity challenges:\s+1/);
 });
+
+test('status --json returns stable, secret-free machine-readable status', () => {
+  const home = makeTempHome();
+  const cwd = makeTempProject();
+
+  const empty = JSON.parse(runCli(['status', '--json'], { cwd, home }).stdout);
+  assert.equal(empty.phase, 'locked');
+  assert.equal(empty.challengeId, null);
+
+  runCli(['challenge', '--summary', 'Add cache', '--files', `${cwd}/src/user.ts`], { cwd, home });
+  const challenged = JSON.parse(runCli(['status', '--json'], { cwd, home }).stdout);
+  assert.equal(challenged.phase, 'challenge');
+  assert.equal(challenged.summary, 'Add cache');
+  assert.equal(challenged.fileCount, 1);
+  assert.equal('assessment' in challenged, false);
+  assert.equal(JSON.stringify(challenged).includes('prompt'), false);
+});
