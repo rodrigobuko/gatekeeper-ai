@@ -11,8 +11,10 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import os from 'node:os';
 
-import { resolveHome, loadState, withStateLock } from '../core/state.mjs';
+import { resolveHome, loadState, withStateLock, statePath } from '../core/state.mjs';
 import {
   createChallenge,
   rejectTeachback,
@@ -414,6 +416,90 @@ function cmdVersion() {
   process.stdout.write(`gatekeeper ${readPackageVersion()}\n`);
 }
 
+// Safe environment diagnostics for pilot bug reports (section 14). Never
+// prints tokens, API keys, full prompts, source code, or full filesystem
+// paths beyond what's needed to confirm the plugin is wired up.
+function tryCommandVersion(cmd, args) {
+  try {
+    return execFileSync(cmd, args, { encoding: 'utf8', timeout: 5000 }).trim().split('\n')[0];
+  } catch {
+    return null;
+  }
+}
+
+function collectDoctorReport(home, cwd) {
+  const { state, corrupt } = loadState(home, cwd);
+  const grant = currentGrant(state);
+  let phase = 'locked';
+  if (state.departed) phase = 'departed';
+  else if (grant) phase = 'granted';
+  else if (state.challenge) phase = 'challenge';
+
+  const file = statePath(home, cwd);
+  let stateReadable = true;
+  try {
+    if (fs.existsSync(file)) fs.accessSync(file, fs.constants.R_OK);
+  } catch {
+    stateReadable = false;
+  }
+
+  let historyWritable = true;
+  try {
+    fs.mkdirSync(home, { recursive: true });
+    fs.accessSync(home, fs.constants.W_OK);
+  } catch {
+    historyWritable = false;
+  }
+
+  const isGitRepo = fs.existsSync(path.join(cwd, '.git'));
+  const hooksConfigPath = path.join(__dirname, '..', '..', 'hooks', 'hooks.json');
+  const hooksConfigPresent = fs.existsSync(hooksConfigPath);
+
+  return {
+    gatekeeperVersion: readPackageVersion(),
+    nodeVersion: process.version,
+    platform: `${os.platform()} ${os.release()} (${os.arch()})`,
+    cwd,
+    isGitRepo,
+    gatePhase: phase,
+    statePathExists: fs.existsSync(file),
+    stateReadable,
+    stateCorrupt: corrupt,
+    gatekeeperHome: home,
+    historyWritable,
+    hooksConfigPresent,
+    claudeCliVersion: tryCommandVersion('claude', ['--version']),
+  };
+}
+
+function cmdDoctor(home, cwd, flags) {
+  const report = collectDoctorReport(home, cwd);
+
+  if (flags.json) {
+    process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+    return;
+  }
+
+  const lines = [
+    'GATEKEEPER DOCTOR',
+    '',
+    `Gatekeeper version:     ${report.gatekeeperVersion}`,
+    `Node version:           ${report.nodeVersion}`,
+    `Platform:               ${report.platform}`,
+    `Claude CLI version:     ${report.claudeCliVersion || 'not found on PATH'}`,
+    `Current directory:      ${report.cwd}`,
+    `Is a Git repo:          ${report.isGitRepo}`,
+    `Gate phase:             ${report.gatePhase}`,
+    `GATEKEEPER_HOME:        ${report.gatekeeperHome}`,
+    `State file exists:      ${report.statePathExists}`,
+    `State readable:         ${report.stateReadable}`,
+    `State was corrupt:      ${report.stateCorrupt}`,
+    `History dir writable:   ${report.historyWritable}`,
+    `Plugin hooks.json found: ${report.hooksConfigPresent}`,
+  ];
+  process.stdout.write(`${lines.join('\n')}\n`);
+}
+
 function printUsage() {
   process.stdout.write(
     [
@@ -462,6 +548,8 @@ function main() {
       return cmdHistory(home, flags);
     case 'version':
       return cmdVersion();
+    case 'doctor':
+      return cmdDoctor(home, cwd, flags);
     default:
       printUsage();
       if (command) process.exitCode = 1;
