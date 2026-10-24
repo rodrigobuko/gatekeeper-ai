@@ -73,16 +73,35 @@ function realPathOrSelf(value) {
   }
 }
 
+// Real path of a file that may not exist yet: resolves its nearest
+// existing ancestor and keeps the rest as given.
+function realPathOfMaybeNewFile(normalized) {
+  const parts = normalized.split('/');
+  for (let i = parts.length; i > 0; i -= 1) {
+    const head = parts.slice(0, i).join('/') || '/';
+    try {
+      const real = fs.realpathSync.native(head).split(path.sep).join('/');
+      return [real, ...parts.slice(i)].join('/');
+    } catch {
+      // keep walking up
+    }
+  }
+  return normalized;
+}
+
 // Paths are stored relative to the project so the map survives a moved
-// checkout and reads naturally. Both the given cwd and its real path are
-// tried as prefixes (macOS /var vs /private/var, see state.mjs).
+// checkout and reads naturally. Symlinks are resolved on both sides first
+// (macOS /var vs /private/var, see state.mjs).
 export function fileConceptId(filePath, cwd) {
   const normalized = normalizeFilePath(filePath, cwd);
-  const prefixes = [...new Set([normalizeFilePath(cwd, cwd), normalizeFilePath(realPathOrSelf(cwd), cwd)])];
-  for (const prefix of prefixes) {
-    const withSlash = prefix.endsWith('/') ? prefix : `${prefix}/`;
-    if (normalized.toLowerCase().startsWith(withSlash.toLowerCase())) {
-      return `file:${normalized.slice(withSlash.length)}`;
+  const candidates = [normalized, normalizeFilePath(realPathOfMaybeNewFile(normalized), cwd)];
+  const prefixes = [normalizeFilePath(cwd, cwd), normalizeFilePath(realPathOrSelf(cwd), cwd)];
+  for (const file of candidates) {
+    for (const prefix of prefixes) {
+      const withSlash = prefix.endsWith('/') ? prefix : `${prefix}/`;
+      if (file.toLowerCase().startsWith(withSlash.toLowerCase())) {
+        return `file:${file.slice(withSlash.length)}`;
+      }
     }
   }
   return `file:${normalized}`;

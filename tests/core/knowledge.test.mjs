@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import {
   fileConceptId,
   dependencyConceptId,
@@ -17,6 +18,16 @@ test('file concepts are relative to the project, on POSIX and Windows paths', ()
   assert.equal(fileConceptId('/home/dev/app/src/a.ts', '/home/dev/app'), 'file:src/a.ts');
   assert.equal(fileConceptId('src/a.ts', '/home/dev/app'), 'file:src/a.ts');
   assert.equal(fileConceptId('C:\\Projects\\app\\src\\a.ts', 'C:\\Projects\\app'), 'file:src/a.ts');
+});
+
+test('a file reached through a symlinked project gets the same id (macOS /var -> /private/var)', () => {
+  const real = makeTempProject();
+  const link = `${real}-link`;
+  fs.symlinkSync(real, link, 'junction');
+  // The CLI runs in the real path; the plan names files through the link,
+  // and a new file does not exist yet.
+  assert.equal(fileConceptId(`${link}/src/new-file.ts`, real), 'file:src/new-file.ts');
+  assert.equal(fileConceptId(`${real}/src/new-file.ts`, link), 'file:src/new-file.ts');
 });
 
 test('dependency and decision ids are stable and readable', () => {
