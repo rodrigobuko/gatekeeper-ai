@@ -66,3 +66,11 @@ test('saveState writes atomically (no leftover .tmp file after a save)', () => {
   const leftoverTmp = fs.readdirSync(dir).some((f) => f.endsWith('.tmp'));
   assert.equal(leftoverTmp, false);
 });
+
+test('a symlinked cwd and its real path share one state key (macOS /var -> /private/var)', () => {
+  const real = makeTempProject();
+  const link = `${real}-link`;
+  // 'junction' works on Windows without admin rights; it is ignored elsewhere.
+  fs.symlinkSync(real, link, 'junction');
+  assert.equal(sessionKey(link), sessionKey(real));
+});

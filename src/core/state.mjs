@@ -26,9 +26,20 @@ export function resolveHome(explicitHome) {
 
 // Syntax-based, not host-based (see files.mjs), a Windows-style cwd must
 // key consistently even when this code runs on a POSIX test/CI host.
+// Symlinks are resolved when the path exists on this host, so the hook's cwd
+// (as Claude Code reports it) and the CLI's process.cwd() (always the real
+// path) land on the same key. macOS /var -> /private/var is the common case.
+function realCwd(cwd) {
+  try {
+    return fs.realpathSync.native(cwd);
+  } catch {
+    return cwd;
+  }
+}
+
 function normalizeCwdForKey(cwd) {
   const mod = pickPathModule(cwd, cwd);
-  let normalized = mod.resolve(cwd).split(mod.sep).join('/');
+  let normalized = mod.resolve(realCwd(cwd)).split(mod.sep).join('/');
   normalized = normalized.replace(/^([A-Za-z]):\//, (_, drive) => `${drive.toLowerCase()}:/`);
   return normalized.toLowerCase();
 }
