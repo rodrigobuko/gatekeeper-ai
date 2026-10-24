@@ -5,6 +5,7 @@ import {
   makeTempProject,
   runNodeScript,
   runCli,
+  runGrant,
   preToolUseInput,
   userPromptSubmitInput,
   nextSessionId,
@@ -66,7 +67,7 @@ test('a scoped grant allows the Edit with no Gatekeeper denial', () => {
   });
 
   // 3. grant
-  const grantResult = runCli(['grant', '--assessment', 'Explains process isolation correctly.'], { cwd, home });
+  const grantResult = runGrant('Explains process isolation correctly.', { cwd, home });
   assert.equal(grantResult.status, 0);
   assert.match(grantResult.stdout, /YOU ARE WORTHY/);
 
@@ -88,7 +89,7 @@ test('an out-of-scope protected file is still denied after a grant for other fil
     cwd,
     home,
   });
-  runCli(['grant', '--assessment', 'ok'], { cwd, home });
+  runGrant('ok', { cwd, home });
 
   const result = runNodeScript(PRE_TOOL_USE_PATH, { input: edit(cwd, sessionId, otherFile), cwd, home });
   const out = JSON.parse(result.stdout);
@@ -164,7 +165,7 @@ test('a new session id in the same directory re-locks a stale challenge', () => 
   runNodeScript(PRE_TOOL_USE_PATH, { input: preToolUseInput({ cwd, sessionId: 'session-A', toolName: 'Edit', toolInput: { file_path: filePath, old_string: 'a', new_string: 'b' } }), cwd, home });
   runCli(['challenge', '--summary', 'x', '--files', filePath], { cwd, home });
   runNodeScript(USER_PROMPT_SUBMIT_PATH, { input: userPromptSubmitInput({ cwd, sessionId: 'session-A', prompt: 'This is a real explanation of the approved behavior in my own words.' }), cwd, home });
-  runCli(['grant', '--assessment', 'ok'], { cwd, home });
+  runGrant('ok', { cwd, home });
 
   const status1 = runCli(['status'], { cwd, home });
   assert.match(status1.stdout, /Phase: GRANTED/);

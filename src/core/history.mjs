@@ -19,6 +19,9 @@ export const SYMBOLS = {
   session_relocked: '↺', // counterclockwise arrow
   reset: '↺',
   protection_change_attempt: '⚠', // warning
+  stage_finished: '□', // square
+  review_passed: '✓',
+  review_failed: '×',
 };
 
 function historyPath(home) {

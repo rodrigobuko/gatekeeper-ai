@@ -16,10 +16,14 @@ import os from 'node:os';
 
 import { resolveHome, loadState, withStateLock, statePath } from '../core/state.mjs';
 import {
-  createChallenge,
+  startChallenge,
+  validateChallengeInput,
   rejectTeachback,
   grantTeachback,
   reviseChallenge,
+  finishStage,
+  passReview,
+  failReview,
   resetLock,
   requestDeparture,
   confirmDeparture,
@@ -28,6 +32,15 @@ import {
 import { appendEvent, readHistory, SYMBOLS } from '../core/history.mjs';
 import { loadStats, updateStats } from '../core/stats.mjs';
 import { computeChangeShape } from '../core/git-baseline.mjs';
+import {
+  loadKnowledge,
+  updateKnowledge,
+  knownConceptIds,
+  learnConcepts,
+  forgetConcept,
+  parseLearned,
+  CONCEPT_KINDS,
+} from '../core/knowledge.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -105,32 +118,90 @@ function describeComplexity(complexity) {
   return complexity.level === 'high' ? 'high (strong complexity warning)' : 'simplicity challenge recommended';
 }
 
-// --- subcommands -----------------------------------------------------------
+// `--new-dependency` carries the library names; a bare flag (no names) is
+// kept as `true` only so validation can reject it with a clear message.
+function dependencyNames(flags) {
+  return toArray(flags['new-dependency']).filter((v) => typeof v === 'string');
+}
 
-function cmdChallenge(home, cwd, flags) {
+// Shared by challenge and revise: reads the plan flags and the project's
+// knowledge map, validates, and returns the options for the engine.
+function planOptionsFromCli(home, cwd, flags, commandName) {
   if (!flags.summary || typeof flags.summary !== 'string') {
-    return fail('gatekeeper challenge: --summary "<text>" is required.');
+    return { error: `gatekeeper ${commandName}: --summary "<text>" is required.` };
   }
   const files = toArray(flags.files);
-  if (files.length === 0) {
-    return fail('gatekeeper challenge: --files <path...> is required.');
+  if (files.length === 0 && toArray(flags['new-files']).length === 0) {
+    return { error: `gatekeeper ${commandName}: --files <path...> is required.` };
   }
+  const planFlags = flagsFromCli(flags);
+  const dependencies = dependencyNames(flags);
+  const decisions = toArray(flags.decision).filter((v) => typeof v === 'string');
+  const validation = validateChallengeInput({ flags: planFlags, dependencies, decisions });
+  if (!validation.ok) return { error: `gatekeeper ${commandName}: ${validation.error}` };
 
-  const challenge = withStateLock(home, cwd, (state) =>
-    createChallenge(state, {
+  return {
+    options: {
       summary: flags.summary,
       files,
       newFiles: toArray(flags['new-files']),
-      flags: flagsFromCli(flags),
+      flags: planFlags,
       cwd,
       mustNotChange: toArray(flags['must-not-change']),
       assumptions: toArray(flags.assumption),
-    }),
-  );
+      dependencies,
+      uses: toArray(flags.uses).filter((v) => typeof v === 'string'),
+      decisions,
+      knownConcepts: knownConceptIds(loadKnowledge(home, cwd)),
+    },
+  };
+}
+
+const TIER_TEXT = {
+  light: 'LIGHT. Nothing new to learn here. One sentence from the developer, in their own words, is enough.',
+  standard: 'STANDARD. Ask one strong question that covers what the developer does not know yet.',
+  deep: 'DEEP. Run the simplicity challenge first, then ask about what the developer does not know yet.',
+};
+
+function planLines(challenge) {
+  const known = challenge.concepts.filter((id) => !challenge.requiredConcepts.includes(id));
+  const lines = [
+    `Files (${challenge.files.length}): ${challenge.files.join(', ')}`,
+    `Complexity: ${describeComplexity(challenge.complexity)}`,
+    `Gate: ${TIER_TEXT[challenge.tier]}`,
+    '',
+  ];
+  if (challenge.requiredConcepts.length > 0) {
+    lines.push('Not yet understood by the developer (ask about these):');
+    for (const id of challenge.requiredConcepts) lines.push(`- ${id}`);
+    lines.push('');
+  }
+  if (known.length > 0) {
+    lines.push(`Already understood (do not ask again): ${known.join(', ')}`, '');
+  }
+  return lines;
+}
+
+function reviewOpenedLines() {
+  return [
+    'The previous stage changed code, so its decision check is now pending.',
+    'Ask that first: "gatekeeper status" shows it, "gatekeeper review" records it.',
+    '',
+  ];
+}
+
+// --- subcommands -----------------------------------------------------------
+
+function cmdChallenge(home, cwd, flags) {
+  const { options, error } = planOptionsFromCli(home, cwd, flags, 'challenge');
+  if (error) return fail(error);
+
+  const { challenge, reviewOpened } = withStateLock(home, cwd, (state) => startChallenge(state, options));
 
   updateStats(home, (stats) => {
     stats.gatesFaced += 1;
     if (challenge.complexity.requiresSimplicityChallenge) stats.simplicityChallenges += 1;
+    if (challenge.tier === 'light') stats.lightGates += 1;
   });
   appendEvent(home, {
     type: 'challenge_started',
@@ -153,13 +224,29 @@ function cmdChallenge(home, cwd, flags) {
       'GATEKEEPER',
       '',
       `Challenge registered (${challenge.id.slice(0, 8)}).`,
-      `Files (${challenge.files.length}): ${challenge.files.join(', ')}`,
-      `Complexity: ${describeComplexity(challenge.complexity)}`,
-      '',
+      ...planLines(challenge),
       ...contractLines,
+      ...(reviewOpened ? reviewOpenedLines() : []),
       'The gate stays locked until the developer teaches back and "gatekeeper grant" succeeds.',
     ].join('\n') + '\n',
   );
+}
+
+// Each `--learned "<concept id> = <note>"` value, parsed. Returns
+// { learned } or { error }.
+function learnedFromCli(flags, commandName) {
+  const values = toArray(flags.learned).filter((v) => typeof v === 'string');
+  const learned = [];
+  for (const value of values) {
+    const parsed = parseLearned(value);
+    if (!parsed) {
+      return {
+        error: `gatekeeper ${commandName}: could not read --learned "${value}". Use --learned "<id> = <what the developer explained>", with an id like file:src/a.ts, dep:redis or decision:cache-the-promise.`,
+      };
+    }
+    learned.push(parsed);
+  }
+  return { learned };
 }
 
 function cmdReject(home, cwd, flags) {
@@ -184,48 +271,57 @@ function cmdReject(home, cwd, flags) {
   );
 }
 
+function knowledgeLine(learned) {
+  if (learned.length === 0) return [];
+  return ['', `Added to the knowledge map: ${learned.map((l) => l.id).join(', ')}`];
+}
+
 function cmdGrant(home, cwd, flags) {
-  const result = withStateLock(home, cwd, (state) => grantTeachback(state, { assessment: flags.assessment }));
+  const { learned, error } = learnedFromCli(flags, 'grant');
+  if (error) return fail(error);
+
+  const result = withStateLock(home, cwd, (state) => grantTeachback(state, { assessment: flags.assessment, learned }));
   if (!result.ok) {
     fail(result.error);
     return;
   }
 
+  if (learned.length > 0) {
+    updateKnowledge(home, cwd, (knowledge) => learnConcepts(knowledge, learned, { challengeId: result.challengeId }));
+  }
   updateStats(home, (stats) => {
     stats.gatesPassed += 1;
     stats.totalAttemptsOnPassedGates += result.attempts;
     if (result.firstAttempt) stats.firstAttemptPasses += 1;
+    stats.conceptsLearned += learned.length;
   });
   appendEvent(home, {
     type: 'gate_passed',
     challengeId: result.challengeId,
     attempt: result.attempts,
     fileCount: result.fileCount,
+    learnedCount: learned.length,
   });
 
-  process.stdout.write(['GATEKEEPER', '', 'YOU ARE WORTHY.', '', 'Gate opened for this implementation.'].join('\n') + '\n');
+  process.stdout.write(
+    [
+      'GATEKEEPER',
+      '',
+      'YOU ARE WORTHY.',
+      '',
+      'Gate opened for this implementation.',
+      ...knowledgeLine(learned),
+      '',
+      'The gate stays open for this whole stage. Run "gatekeeper done" when the stage is finished.',
+    ].join('\n') + '\n',
+  );
 }
 
 function cmdRevise(home, cwd, flags) {
-  if (!flags.summary || typeof flags.summary !== 'string') {
-    return fail('gatekeeper revise: --summary "<text>" is required.');
-  }
-  const files = toArray(flags.files);
-  if (files.length === 0) {
-    return fail('gatekeeper revise: --files <path...> is required.');
-  }
+  const { options, error } = planOptionsFromCli(home, cwd, flags, 'revise');
+  if (error) return fail(error);
 
-  const result = withStateLock(home, cwd, (state) =>
-    reviseChallenge(state, {
-      summary: flags.summary,
-      files,
-      newFiles: toArray(flags['new-files']),
-      flags: flagsFromCli(flags),
-      cwd,
-      mustNotChange: toArray(flags['must-not-change']),
-      assumptions: toArray(flags.assumption),
-    }),
-  );
+  const result = withStateLock(home, cwd, (state) => reviseChallenge(state, options));
 
   updateStats(home, (stats) => {
     // A revision opens a genuinely new challenge (new id, reset counters),
@@ -246,10 +342,96 @@ function cmdRevise(home, cwd, flags) {
       'GATEKEEPER',
       '',
       `Plan revised (new challenge ${result.challenge.id.slice(0, 8)}).`,
-      `Files (${result.challenge.files.length}): ${result.challenge.files.join(', ')}`,
-      'The previous grant is invalidated. A new teach-back is required before the gate opens.',
+      ...planLines(result.challenge),
+      'The previous grant is invalidated. Ask only about what changed; what the developer already explained stays known.',
     ].join('\n') + '\n',
   );
+}
+
+function cmdDone(home, cwd) {
+  const result = withStateLock(home, cwd, (state) => finishStage(state));
+  if (!result.ok) return fail(result.error);
+
+  appendEvent(home, { type: 'stage_finished', summary: result.summary, reviewOpened: result.reviewOpened });
+
+  const lines = ['GATEKEEPER', '', `Stage finished: ${result.summary}`, ''];
+  if (result.reviewOpened) {
+    lines.push(
+      'Decision check pending. Pick ONE real choice you made in the code of this stage, one that had an',
+      'alternative (a library, a data structure, where the logic lives, how errors are handled), and ask',
+      'the developer to explain or argue for it. "gatekeeper diff" shows what changed.',
+      '',
+      'The next stage cannot be granted until "gatekeeper review --pass" succeeds.',
+    );
+  } else {
+    lines.push('No decision check needed for this stage. The gate is locked again.');
+  }
+  process.stdout.write(`${lines.join('\n')}\n`);
+}
+
+function cmdReview(home, cwd, flags) {
+  if (flags.fail) {
+    const result = withStateLock(home, cwd, (state) => failReview(state, { reason: flags.reason }));
+    if (!result.ok) return fail(result.error);
+    updateStats(home, (stats) => {
+      stats.decisionChecksFailed += 1;
+    });
+    appendEvent(home, { type: 'review_failed', reason: flags.reason });
+    process.stdout.write(
+      ['GATEKEEPER', '', 'Decision check not passed yet. The next stage stays locked.', `Reason: ${flags.reason}`].join('\n') + '\n',
+    );
+    return;
+  }
+
+  if (flags.pass) {
+    const { learned, error } = learnedFromCli(flags, 'review');
+    if (error) return fail(error);
+    const result = withStateLock(home, cwd, (state) => passReview(state, { learned }));
+    if (!result.ok) return fail(result.error);
+
+    updateKnowledge(home, cwd, (knowledge) => learnConcepts(knowledge, learned, { challengeId: result.review.challengeId }));
+    updateStats(home, (stats) => {
+      stats.decisionChecksPassed += 1;
+      stats.conceptsLearned += learned.length;
+    });
+    appendEvent(home, { type: 'review_passed', attempt: result.attempts, learnedCount: learned.length });
+    process.stdout.write(
+      ['GATEKEEPER', '', 'Decision check passed. The developer can argue for this code.', ...knowledgeLine(learned)].join('\n') + '\n',
+    );
+    return;
+  }
+
+  fail('gatekeeper review: pass --pass --learned "decision:<name> = <note>", or --fail --reason "<what is missing>".');
+}
+
+function cmdKnowledge(home, cwd, flags) {
+  const knowledge = loadKnowledge(home, cwd);
+  if (flags.json) {
+    process.stdout.write(`${JSON.stringify(knowledge)}\n`);
+    return;
+  }
+  const ids = Object.keys(knowledge.entries).sort();
+  const lines = ['GATEKEEPER KNOWLEDGE MAP', ''];
+  if (ids.length === 0) {
+    lines.push('(nothing yet: every file, library and decision is still new)');
+  }
+  const titles = { file: 'Files', dep: 'Libraries', decision: 'Decisions' };
+  for (const kind of CONCEPT_KINDS) {
+    const ofKind = ids.filter((id) => knowledge.entries[id].kind === kind);
+    if (ofKind.length === 0) continue;
+    lines.push(`${titles[kind]}:`);
+    for (const id of ofKind) lines.push(`  ${id.slice(kind.length + 1)}: ${knowledge.entries[id].note}`);
+    lines.push('');
+  }
+  process.stdout.write(`${lines.join('\n').trimEnd()}\n`);
+}
+
+function cmdForget(home, cwd, flags) {
+  const id = typeof flags.concept === 'string' ? flags.concept : null;
+  if (!id) return fail('gatekeeper forget: --concept <id> is required, e.g. --concept dep:redis.');
+  const removed = updateKnowledge(home, cwd, (knowledge) => forgetConcept(knowledge, id));
+  if (!removed) return fail(`gatekeeper forget: "${id}" is not in the knowledge map.`);
+  process.stdout.write(`GATEKEEPER: "${id}" removed from the knowledge map. It will be asked about again.\n`);
 }
 
 function cmdReset(home, cwd) {
@@ -329,6 +511,10 @@ function statusToJson(state, corrupt) {
     failedTeachbacks: state.challenge ? state.challenge.failedTeachbacks : 0,
     overrideAttempts: state.challenge ? state.challenge.overrideAttempts : 0,
     requiresSimplicityChallenge: state.challenge ? state.challenge.complexity.requiresSimplicityChallenge : false,
+    tier: state.challenge ? state.challenge.tier || null : null,
+    requiredConcepts: state.challenge ? state.challenge.requiredConcepts || [] : [],
+    reviewPending: Boolean(state.review),
+    reviewSummary: state.review ? state.review.summary : null,
     grantedAt: grant ? grant.grantedAt : null,
     departurePending: Boolean(state.departure && state.departure.pending),
     departureConfirmed: Boolean(state.departure && state.departure.confirmedByUser),
@@ -358,6 +544,10 @@ function cmdStatus(home, cwd, flags) {
     lines.push('Phase: LOCKED (challenge awaiting teach-back)');
     lines.push(`Challenge: ${state.challenge.summary}`);
     lines.push(`Files (${state.challenge.files.length}): ${state.challenge.files.join(', ')}`);
+    if (state.challenge.tier) lines.push(`Gate: ${state.challenge.tier}`);
+    if ((state.challenge.requiredConcepts || []).length > 0) {
+      lines.push(`Not yet understood: ${state.challenge.requiredConcepts.join(', ')}`);
+    }
     lines.push(`Responses so far: ${state.challenge.userResponsesAfterChallenge}`);
     lines.push(`Latest response eligible for grant: ${state.challenge.latestResponseEligibleForGrant}`);
     lines.push(`Failed teach-backs: ${state.challenge.failedTeachbacks}`);
@@ -370,6 +560,9 @@ function cmdStatus(home, cwd, flags) {
   } else {
     lines.push('Phase: LOCKED (no active challenge)');
   }
+  if (state.review) {
+    lines.push('', `Decision check pending for the previous stage: ${state.review.summary}`);
+  }
   if (state.departure && state.departure.pending) {
     lines.push('', `Departure requested, awaiting confirmation phrase (confirmed: ${state.departure.confirmedByUser}).`);
   }
@@ -380,18 +573,20 @@ function cmdStatus(home, cwd, flags) {
 // opened. Nothing here is persisted, it's computed fresh from git each
 // time. This is groundwork for a future pre-push gate, not one itself: it
 // only reports, it never denies anything.
+// While a decision check is pending, it shows the whole finished stage.
 function cmdDiff(home, cwd, flags) {
   const { state } = loadState(home, cwd);
-  if (!state.challenge) {
+  const source = state.challenge || state.review;
+  if (!source) {
     return fail('gatekeeper diff: no active challenge for this directory.');
   }
-  if (!state.challenge.gitBaseline) {
+  if (!source.gitBaseline) {
     return fail('gatekeeper diff: no Git baseline was captured for this challenge (not a Git repo at challenge time?).');
   }
 
   const grant = currentGrant(state);
-  const approvedFiles = grant ? grant.files : state.challenge.files;
-  const shape = computeChangeShape(cwd, state.challenge.gitBaseline, approvedFiles);
+  const approvedFiles = grant ? grant.files : source.files;
+  const shape = computeChangeShape(cwd, source.gitBaseline, approvedFiles);
   if (!shape) {
     return fail('gatekeeper diff: could not compute a diff (is Git still available in this directory?).');
   }
@@ -428,6 +623,10 @@ function cmdStats(home) {
     ['Average attempts per pass:', avg],
     ['Plan revisions:', stats.planRevisions],
     ['Simplicity challenges:', stats.simplicityChallenges],
+    ['Light gates:', stats.lightGates],
+    ['Concepts learned:', stats.conceptsLearned],
+    ['Decision checks passed:', stats.decisionChecksPassed],
+    ['Decision checks retried:', stats.decisionChecksFailed],
     ['Override attempts:', stats.overrideAttempts],
     ['Explicit departures:', stats.explicitDepartures],
     ['Protection-change events:', stats.protectionChangeAttempts],
@@ -458,6 +657,12 @@ function describeHistoryEntry(entry) {
       return 'Session reset: gate locked';
     case 'session_relocked':
       return `Gate re-locked: ${entry.reason || 'new session detected'}`;
+    case 'stage_finished':
+      return `Stage finished${entry.reviewOpened ? ', decision check pending' : ''}`;
+    case 'review_passed':
+      return `Decision check passed on attempt ${entry.attempt}`;
+    case 'review_failed':
+      return `Decision check not passed yet: ${entry.reason || 'no reason recorded'}`;
     case 'protection_change_attempt':
       return 'Configuration changed while gate was active';
     default:
@@ -588,6 +793,11 @@ function printUsage() {
       '  reject --reason <r>           Record an insufficient teach-back',
       '  grant --assessment <a>        Open the gate for the active challenge',
       '  revise --summary <s> --files <f...>      Replace the active challenge (scope/plan change)',
+      '  done                          Finish the current stage (may open a decision check)',
+      '  review --pass --learned <l>    Record a passed decision check',
+      '  review --fail --reason <r>     Record a decision check answer that was not enough',
+      '  knowledge [--json]            Show what the developer already understands here',
+      '  forget --concept <id>         Remove one item so it is asked about again',
       '  reset                         Re-lock this session without touching history/stats',
       '  depart --request               Start departure (asks for the exact confirmation phrase)',
       '  depart --confirm               Finish departure (requires the phrase to have been sent)',
@@ -596,9 +806,10 @@ function printUsage() {
       '  history [--limit N]           Show recent events',
       '  version                       Print the installed version',
       '',
-      'challenge/revise also accept: --new-files <f...> --new-dependency --architecture-change',
-      '  --schema-change --planned-tests --new-exports <n> --must-not-change "<text>" (repeatable)',
-      '  --assumption "<text>" (repeatable)',
+      'challenge/revise also accept: --new-files <f...> --new-dependency <name...> --uses <name...>',
+      '  --decision "<text>" (repeatable) --architecture-change --schema-change --planned-tests',
+      '  --new-exports <n> --must-not-change "<text>" (repeatable) --assumption "<text>" (repeatable)',
+      'grant also accepts: --learned "<concept id> = <note>" (repeatable)',
     ].join('\n'),
   );
 }
@@ -619,6 +830,14 @@ function main() {
       return cmdGrant(home, cwd, flags);
     case 'revise':
       return cmdRevise(home, cwd, flags);
+    case 'done':
+      return cmdDone(home, cwd);
+    case 'review':
+      return cmdReview(home, cwd, flags);
+    case 'knowledge':
+      return cmdKnowledge(home, cwd, flags);
+    case 'forget':
+      return cmdForget(home, cwd, flags);
     case 'reset':
       return cmdReset(home, cwd);
     case 'depart':

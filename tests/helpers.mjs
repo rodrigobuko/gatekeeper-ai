@@ -10,7 +10,6 @@ export const REPO_ROOT = path.join(__dirname, '..');
 export const CLI_PATH = path.join(REPO_ROOT, 'src', 'cli', 'gatekeeper.mjs');
 export const PRE_TOOL_USE_PATH = path.join(REPO_ROOT, 'src', 'adapters', 'claude', 'pre-tool-use.mjs');
 export const USER_PROMPT_SUBMIT_PATH = path.join(REPO_ROOT, 'src', 'adapters', 'claude', 'user-prompt-submit.mjs');
-export const STOP_PATH = path.join(REPO_ROOT, 'src', 'adapters', 'claude', 'stop.mjs');
 export const CONFIG_CHANGE_PATH = path.join(REPO_ROOT, 'src', 'adapters', 'claude', 'config-change.mjs');
 export const SESSION_START_PATH = path.join(REPO_ROOT, 'src', 'adapters', 'claude', 'session-start.mjs');
 
@@ -85,15 +84,11 @@ export function sessionStartInput({ cwd, sessionId, reason = 'startup' }) {
   };
 }
 
-export function stopInput({ cwd, sessionId }) {
-  return {
-    session_id: sessionId,
-    prompt_id: 'test-prompt-id',
-    transcript_path: path.join(cwd, 'transcript.jsonl'),
-    cwd,
-    permission_mode: 'default',
-    hook_event_name: 'Stop',
-    last_assistant_message: 'done',
-    stop_reason: 'end_turn',
-  };
+
+// Grants the active challenge the way the gate skill does: every concept
+// the developer did not know yet is passed as --learned.
+export function runGrant(assessment, { cwd, home, env } = {}) {
+  const status = JSON.parse(runCli(['status', '--json'], { cwd, home, env }).stdout);
+  const learned = status.requiredConcepts.flatMap((id) => ['--learned', `${id} = explained in the test`]);
+  return runCli(['grant', '--assessment', assessment, ...learned], { cwd, home, env });
 }

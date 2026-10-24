@@ -2,26 +2,30 @@
 
 **Understand it before you ship it.**
 
-Gatekeeper is a plugin for [Claude Code](https://claude.com/claude-code). It stops Claude from editing your
-code until you can explain the change in your own words.
+Gatekeeper is a plugin for [Claude Code](https://claude.com/claude-code). It makes sure you actually
+understand the code Claude writes for you: which libraries it uses and why, what each file is for, what the
+architecture is, why the spec needs it, and why the code works the way it does.
 
-Claude can still read, investigate, explain and discuss as much as you want. It just can't touch protected
-files until you show you understand what is about to change and why.
+Claude can still read, investigate, explain and discuss as much as you want. It just can't change your code
+until you can explain what is new in your own words. Gatekeeper remembers what you already understand, so it
+only asks about what is new, and gets out of the way as you learn the project.
 
 ```
 you ask for a change
         ↓
-Gatekeeper locks the code
+Claude proposes a short plan
         ↓
-Claude proposes a short plan and asks you one question
+Gatekeeper lists what is new to you (files, libraries, decisions)
         ↓
-you ask anything you need (free, unlimited)
+one question about it (ask for help as much as you need)
         ↓
-you explain the change back in your own words
+you explain it in your own words
         ↓
 YOU ARE WORTHY.
         ↓
-Claude implements exactly what was approved
+Claude implements the whole stage
+        ↓
+one question about a real decision in the code it wrote
 ```
 
 ## Why
@@ -29,8 +33,8 @@ Claude implements exactly what was approved
 With AI coding it is easy to become a passive approver: the agent picks the design, writes a long plan,
 you say "ok", it edits ten files, and you ship code you no longer understand.
 
-Gatekeeper keeps you in the loop. The goal is not to slow you down. The goal is that you still know your
-own codebase after the agent is done.
+Gatekeeper keeps you in the loop without turning every edit into a quiz. You explain things once, Gatekeeper
+remembers, and the next question is only about what you haven't seen yet.
 
 ## Install
 
@@ -81,10 +85,10 @@ To remove it: `claude plugin uninstall gatekeeper@gatekeeper-ai`.
 
    > Add an in-memory cache with a 60 second TTL to getUser. Keep it simple and add meaningful tests.
 
-3. Claude reads the code, shows a short plan and asks you a question, for example:
+3. Claude reads the code, shows a short plan and asks you one question about what is new, for example:
 
-   > Suppose two requests for user 42 arrive at the same moment with an empty cache. How many times is
-   > client.get called, and why?
+   > Why cache the promise instead of the value? Suppose two requests for user 42 arrive at the same
+   > moment with an empty cache: how many times is client.get called in each case?
 
 4. Reply `Looks good, go ahead.` Nothing happens. The gate stays locked.
 
@@ -100,6 +104,12 @@ To remove it: `claude plugin uninstall gatekeeper@gatekeeper-ai`.
 
    and implements only the files in the approved plan.
 
+6. When it's done, Claude asks one question about a real choice in the code it wrote, for example why it
+   deletes the cache entry when the request fails. Answer it and the next stage can start.
+
+7. Ask for another change to `userService.js`. This time Gatekeeper already knows you understand that file,
+   so a single sentence about the change is enough.
+
 [`PILOT_TESTING.md`](PILOT_TESTING.md) has a longer 10 to 15 minute walkthrough with ten scenarios
 (wrong answer, asking for help, scope drift, bypass attempts, leaving the gate).
 
@@ -109,11 +119,31 @@ To remove it: `claude plugin uninstall gatekeeper@gatekeeper-ai`.
 denied on protected files (source code and most config files). Documentation is not protected. The block
 happens before the tool runs, so nothing needs to be undone.
 
-**What opens the gate.** Only the `gatekeeper grant` command, and only when all three are true:
+**What you are asked about.** Every plan lists what it touches:
+
+- **files**: what is each file for?
+- **libraries**: which ones, and why these and not others?
+- **decisions**: each real choice with an alternative, like "cache the promise instead of the value".
+  Architecture and schema changes must name their decisions.
+
+Gatekeeper compares that list with your **knowledge map** (what you already explained in this project) and
+only asks about what is new.
+
+**How deep the gate is.** Decided in code from the plan, not by the model:
+
+| Gate | When | What you do |
+|---|---|---|
+| Light | nothing new, small change | say in one sentence what will change |
+| Standard | something new to you | answer one question that covers it |
+| Deep | 5 or more files, a new dependency, an architecture or schema change | justify the complexity, then answer |
+
+**What opens the gate.** Only the `gatekeeper grant` command, and only when all of this is true:
 
 1. Claude registered a plan (`gatekeeper challenge`).
 2. You sent at least one message after that plan.
-3. Your last message was a real explanation.
+3. Your last message was a real explanation (for a light gate, any genuine sentence).
+4. Every new file, library and decision is covered by what you explained.
+5. No decision check from the previous stage is pending.
 
 These checks run in code, not in the model's judgment.
 
@@ -160,14 +190,45 @@ A new dependency, an architecture change, a schema change or 3 or more new files
 simplicity challenge. Example: *"This adds a provider, a factory and an adapter. Which current requirement
 needs them?"* If you spot unnecessary complexity, Claude simplifies the plan and asks again.
 
-## When the plan changes
+## Stages: one approval per piece of work
 
-An approval covers only the approved files. If the work grows (a new file, a new dependency, a schema change,
-or an assumption turns out wrong), the out of scope edit is blocked. Claude runs `gatekeeper revise`, explains
-what changed, and you answer a new question about that change.
+A big spec is split into stages (for example: data model, then service, then UI). The approval lasts for
+the whole stage, across as many turns as Claude needs. You are not interrupted on every edit.
 
-An approval also ends when the Claude turn that used it finishes. To continue the same approved work in the
-next turn, one more real message from you is enough. You don't need to explain everything again.
+The approval only covers the approved files. If the work grows (a new file, a new library, a schema change,
+or an assumption turns out wrong), the edit is blocked and Claude runs `gatekeeper revise`. You are asked
+only about what changed. Installing an undeclared library through the shell (`npm install x`,
+`pip install x`) is blocked too.
+
+## Decision check at the end of a stage
+
+When a stage that changed code ends (`gatekeeper done`), Claude looks at what it actually wrote and asks
+**one** question about a real choice in it: a data structure, where some logic lives, how errors are
+handled, a library API. You explain or argue for it. The next stage can't start until you do.
+
+This catches what a plan can't: the decisions made while writing the code. Light stages skip it.
+
+## Your knowledge map
+
+```
+gatekeeper knowledge
+```
+
+```
+GATEKEEPER KNOWLEDGE MAP
+
+Files:
+  src/cache.ts: holds the TTL cache shared by getUser
+
+Libraries:
+  redis: shared cache so all workers see the same values
+
+Decisions:
+  cache-the-promise-instead-of-the-value: concurrent calls share one request
+```
+
+It is kept per project and grows as you work. To be asked about something again, remove it:
+`gatekeeper forget --concept dep:redis`.
 
 ## Leaving the gate
 
@@ -207,9 +268,14 @@ All commands act on the current folder.
 | `gatekeeper status [--json]` | Show whether the gate is locked or open |
 | `gatekeeper challenge --summary <s> --files <f...>` | Register a plan and lock the gate |
 | `gatekeeper reject --reason <r>` | Record an answer that wasn't enough |
-| `gatekeeper grant --assessment <a>` | Open the gate for the current plan |
+| `gatekeeper grant --assessment <a> --learned "<id> = <note>"` | Open the gate for the current stage |
 | `gatekeeper revise --summary <s> --files <f...>` | Replace the plan after a scope change |
-| `gatekeeper reset` | Lock again, keeping history |
+| `gatekeeper done` | Finish the stage (opens the decision check if code changed) |
+| `gatekeeper review --pass --learned "<id> = <note>"` | Record a passed decision check |
+| `gatekeeper review --fail --reason <r>` | Record a decision check answer that wasn't enough |
+| `gatekeeper knowledge [--json]` | Show what you already understand in this project |
+| `gatekeeper forget --concept <id>` | Remove one item so it is asked about again |
+| `gatekeeper reset` | Lock again, keeping history and any pending decision check |
 | `gatekeeper depart --request` / `--confirm` | Leave the gate (two steps) |
 | `gatekeeper diff [--json]` | Files changed since the plan was registered (uses Git) |
 | `gatekeeper doctor [--json]` | Safe diagnostics to attach to a bug report |
@@ -217,9 +283,13 @@ All commands act on the current folder.
 | `gatekeeper history [--limit N]` | Show recent events |
 | `gatekeeper version` | Show the installed version |
 
-`challenge` and `revise` also accept `--new-files <path...>`, `--new-dependency`, `--architecture-change`,
-`--schema-change`, `--planned-tests`, `--new-exports <n>`, and repeatable `--must-not-change "<text>"` and
-`--assumption "<text>"`.
+`challenge` and `revise` also accept `--new-files <path...>`, `--uses <library...>` (libraries the change
+relies on), `--new-dependency <library...>` (libraries it adds), repeatable `--decision "<choice>"`,
+`--architecture-change`, `--schema-change`, `--planned-tests`, `--new-exports <n>`, and repeatable
+`--must-not-change "<text>"` and `--assumption "<text>"`.
+
+Ids look like `file:src/cache.ts`, `dep:redis` and `decision:cache-the-promise-instead-of-the-value`.
+`gatekeeper challenge` prints the exact ids that still need to be covered.
 
 In normal use you never type these. Claude runs them following the plugin's `gate` skill.
 
@@ -235,17 +305,22 @@ Unsuccessful teach-backs:    11
 Average attempts per pass:  1.46
 Plan revisions:               7
 Simplicity challenges:       10
+Light gates:                 14
+Concepts learned:            41
+Decision checks passed:      19
+Decision checks retried:      4
 Override attempts:            3
 Explicit departures:          1
 ```
 
 There is no score for the developer, only workflow counters. History keeps short metadata (time, event type,
-file count, a short reason). It never stores your prompts, Claude's messages or your code.
+file count, a short reason). It never stores your prompts, Claude's messages or your code. The knowledge map
+stores file paths, library names, decision names and one short note for each.
 
 ## Privacy and safety
 
-- State lives in `~/.gatekeeper` (or `$GATEKEEPER_HOME`), never inside your repo, so it never shows up in a
-  commit.
+- Everything lives in `~/.gatekeeper` (or `$GATEKEEPER_HOME`), never inside your repo, so it never shows up
+  in a commit.
 - No network calls and no telemetry.
 - A broken or unreadable state file counts as **locked**, never as open.
 - If a Gatekeeper hook itself crashes, it lets the tool run instead of freezing your editor. It is a workflow
@@ -263,6 +338,11 @@ Gatekeeper enforces a workflow. It is not a security sandbox.
   `Edit` and `Write` are always checked against the approved file list.
 - Noticing that a plan's assumption turned out false depends on Claude. The file scope and message checks
   are mechanical.
+- Files and installed libraries are detected mechanically. Libraries the change only relies on (`--uses`)
+  and decisions (`--decision`) are declared by Claude, and the skill tells it to declare them honestly.
+  Judging whether your explanation is good enough is Claude's call too.
+- The approval lasts for the whole stage. Claude is told to run `gatekeeper done` between stages; if it
+  doesn't, a new plan or a new session closes the stage anyway, and the decision check is still owed.
 - State is per folder. Two Claude Code sessions open in the same folder at the same time share one gate.
 - Tested on Windows 11 (Git Bash and PowerShell), with CI on Ubuntu, Windows and macOS.
 
@@ -297,9 +377,9 @@ you can, a failing test.
 
 ## Roadmap
 
-- A final check before `git push` that asks about the actual diff, not just the plan
+- A final check before `git push` over the whole branch, on top of the per stage decision check
 - Adapters for Codex and OpenCode
-- Configurable question depth
+- Detecting libraries in use from imports, instead of relying on `--uses`
 - Scope checks for shell commands after approval
 
 Not planned: dashboards, cloud backend, leaderboards, developer scores or telemetry.

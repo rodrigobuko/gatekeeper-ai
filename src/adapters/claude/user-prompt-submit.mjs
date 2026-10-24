@@ -33,7 +33,8 @@ function main() {
       }
     }
 
-    const awaitingTeachback = Boolean(state.challenge) && !currentGrant(state);
+    // A pending decision check also waits for a real answer.
+    const awaitingTeachback = (Boolean(state.challenge) && !currentGrant(state)) || Boolean(state.review);
     let override = false;
     let cId = null;
 
@@ -42,7 +43,7 @@ function main() {
       recordUserResponse(state, { classification });
       if (classification === 'bypass') {
         override = true;
-        cId = state.challenge.id;
+        cId = state.challenge ? state.challenge.id : state.review.challengeId;
       }
     }
 

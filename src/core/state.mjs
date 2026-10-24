@@ -70,6 +70,7 @@ export function defaultState(cwd) {
     grant: null,
     departed: false,
     departure: null,
+    review: null,
     createdAt: now,
     updatedAt: now,
   };

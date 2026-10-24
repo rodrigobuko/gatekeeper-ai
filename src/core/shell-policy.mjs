@@ -150,6 +150,10 @@ const CLI_SUBCOMMANDS = [
   'version',
   'doctor',
   'diff',
+  'done',
+  'review',
+  'knowledge',
+  'forget',
 ];
 const SUBCOMMAND_ALT = CLI_SUBCOMMANDS.join('|');
 

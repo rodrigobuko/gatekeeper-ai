@@ -25,6 +25,10 @@ export function defaultStats() {
     overrideAttempts: 0,
     explicitDepartures: 0,
     protectionChangeAttempts: 0,
+    lightGates: 0,
+    conceptsLearned: 0,
+    decisionChecksPassed: 0,
+    decisionChecksFailed: 0,
   };
 }
 

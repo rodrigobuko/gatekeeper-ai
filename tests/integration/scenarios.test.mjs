@@ -12,13 +12,12 @@ import {
   makeTempProject,
   runNodeScript,
   runCli,
+  runGrant,
   preToolUseInput,
   userPromptSubmitInput,
-  stopInput,
   nextSessionId,
   PRE_TOOL_USE_PATH,
   USER_PROMPT_SUBMIT_PATH,
-  STOP_PATH,
 } from '../helpers.mjs';
 
 function edit(cwd, sessionId, filePath) {
@@ -72,7 +71,7 @@ test('full happy path: locked -> challenge -> help -> teach-back -> grant -> imp
     cwd,
     home,
   });
-  const grant = runCli(['grant', '--assessment', 'Explains process isolation and staleness bound correctly.'], { cwd, home });
+  const grant = runGrant('Explains process isolation and staleness bound correctly.', { cwd, home });
   assert.equal(grant.status, 0);
   assert.match(grant.stdout, /YOU ARE WORTHY\./);
 
@@ -80,10 +79,32 @@ test('full happy path: locked -> challenge -> help -> teach-back -> grant -> imp
   const allowed = runNodeScript(PRE_TOOL_USE_PATH, { input: edit(cwd, sessionId, filePath), cwd, home });
   assert.equal(allowed.stdout.trim(), '');
 
-  // Turn ends; the used grant is revoked so unrelated next work can't inherit it.
-  runNodeScript(STOP_PATH, { input: stopInput({ cwd, sessionId }), cwd, home });
+  // The grant lasts the whole stage: a later edit of the same file in the
+  // same stage needs no new question.
+  const stillAllowed = runNodeScript(PRE_TOOL_USE_PATH, { input: edit(cwd, sessionId, filePath), cwd, home });
+  assert.equal(stillAllowed.stdout.trim(), '');
+
+  // The stage ends; it changed code, so a decision check is now pending and
+  // the gate is locked again.
+  const done = runCli(['done'], { cwd, home });
+  assert.equal(done.status, 0);
+  assert.match(done.stdout, /Decision check pending/);
   const deniedAgain = runNodeScript(PRE_TOOL_USE_PATH, { input: edit(cwd, sessionId, filePath), cwd, home });
   assert.equal(JSON.parse(deniedAgain.stdout).hookSpecificOutput.permissionDecision, 'deny');
+
+  // The developer argues for a real choice in the code.
+  runNodeScript(USER_PROMPT_SUBMIT_PATH, {
+    input: userPromptSubmitInput({
+      cwd,
+      sessionId,
+      prompt: 'Caching the promise instead of the value means two calls at the same moment share one request.',
+    }),
+    cwd,
+    home,
+  });
+  const review = runCli(['review', '--pass', '--learned', 'decision:cache-the-promise = shares one request between concurrent calls'], { cwd, home });
+  assert.equal(review.status, 0);
+  assert.match(review.stdout, /Decision check passed/);
 
   // L. stats/history reflect the run without storing full prompts.
   const stats = runCli(['stats'], { cwd, home });
@@ -104,19 +125,19 @@ test('scope expansion: revise is required before an out-of-scope file can be tou
 
   runCli(['challenge', '--summary', 'Add cache', '--files', userFile], { cwd, home });
   runNodeScript(USER_PROMPT_SUBMIT_PATH, { input: userPromptSubmitInput({ cwd, sessionId, prompt: 'This is a real explanation of the approved behavior in my own words.' }), cwd, home });
-  runCli(['grant', '--assessment', 'ok'], { cwd, home });
+  runGrant('ok', { cwd, home });
 
   // G. scope expansion: schema.ts was never approved.
   const denied = runNodeScript(PRE_TOOL_USE_PATH, { input: edit(cwd, sessionId, schemaFile), cwd, home });
   assert.equal(JSON.parse(denied.stdout).hookSpecificOutput.permissionDecision, 'deny');
 
-  runCli(['revise', '--summary', 'Cache also needs a schema column', '--files', userFile, schemaFile, '--schema-change'], { cwd, home });
+  runCli(['revise', '--summary', 'Cache also needs a schema column', '--files', userFile, schemaFile, '--schema-change', '--decision', 'Store expiry in a column instead of memory'], { cwd, home });
   runNodeScript(USER_PROMPT_SUBMIT_PATH, {
     input: userPromptSubmitInput({ cwd, sessionId, prompt: 'Explains why the schema column is needed.' }),
     cwd,
     home,
   });
-  const grant = runCli(['grant', '--assessment', 'Explains the schema delta correctly.'], { cwd, home });
+  const grant = runGrant('Explains the schema delta correctly.', { cwd, home });
   assert.equal(grant.status, 0);
 
   const allowed = runNodeScript(PRE_TOOL_USE_PATH, { input: edit(cwd, sessionId, schemaFile), cwd, home });
@@ -144,7 +165,7 @@ test('conversational bypass never opens the gate, and is tracked separately from
     home,
   });
 
-  const grant = runCli(['grant', '--assessment', 'ok'], { cwd, home });
+  const grant = runGrant('ok', { cwd, home });
   assert.equal(grant.status, 1);
 
   const deniedMutation = runNodeScript(PRE_TOOL_USE_PATH, { input: edit(cwd, sessionId, filePath), cwd, home });

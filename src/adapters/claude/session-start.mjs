@@ -30,6 +30,8 @@ function main() {
     message = `Gatekeeper: gate GRANTED for "${state.challenge.summary}" (${grant.files.length} files).`;
   } else if (state.challenge) {
     message = `Gatekeeper: gate LOCKED, awaiting teach-back for "${state.challenge.summary}" (${state.challenge.files.length} files).`;
+  } else if (state.review) {
+    message = `Gatekeeper: decision check pending for "${state.review.summary}". It comes before the next stage.`;
   } else if (state.departed) {
     message = 'Gatekeeper: this directory is unguarded (explicit departure).';
   }

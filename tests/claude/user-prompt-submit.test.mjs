@@ -5,6 +5,7 @@ import {
   makeTempProject,
   runNodeScript,
   runCli,
+  runGrant,
   userPromptSubmitInput,
   nextSessionId,
   USER_PROMPT_SUBMIT_PATH,
@@ -23,7 +24,7 @@ test('a normal response after a challenge makes the developer eligible for grant
     home,
   });
 
-  const grant = runCli(['grant', '--assessment', 'ok'], { cwd, home });
+  const grant = runGrant('ok', { cwd, home });
   assert.equal(grant.status, 0);
 });
 
@@ -61,7 +62,7 @@ test('an obvious bypass phrase is flagged: the latest response becomes ineligibl
   });
   assert.match(upResult.stdout, /OVERRIDE ATTEMPT DETECTED/);
 
-  const grant = runCli(['grant', '--assessment', 'ok'], { cwd, home });
+  const grant = runGrant('ok', { cwd, home });
   assert.equal(grant.status, 1);
 });
 
@@ -79,7 +80,7 @@ test('a Portuguese bypass phrase is also flagged', () => {
   });
   assert.match(upResult.stdout, /OVERRIDE ATTEMPT DETECTED/);
 
-  const grant = runCli(['grant', '--assessment', 'ok'], { cwd, home });
+  const grant = runGrant('ok', { cwd, home });
   assert.equal(grant.status, 1);
 });
 
@@ -97,7 +98,7 @@ test('a genuine response after a bypass attempt recovers eligibility', () => {
     home,
   });
 
-  const grant = runCli(['grant', '--assessment', 'ok'], { cwd, home });
+  const grant = runGrant('ok', { cwd, home });
   assert.equal(grant.status, 0);
 });
 

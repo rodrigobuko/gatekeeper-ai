@@ -1,5 +1,19 @@
 # GATEKEEPER: implementation notes
 
+> **v0.2 changes the gate model.** The sections below describe v0.1. What changed:
+>
+> - A per project **knowledge map** (`src/core/knowledge.mjs`) records the files, libraries and decisions
+>   the developer has explained. A plan only requires what is not in it yet, and `grant` must cover each of
+>   those with `--learned`.
+> - Gates are **light, standard or deep**, decided in code from the plan.
+> - The grant lasts for a whole **stage**, not a turn. The `Stop` hook and per-turn revocation were removed.
+> - A stage that changed code ends with a **decision check** (`done`, then `review`), which blocks the next
+>   grant until it passes. A new plan or a new session also closes the stage.
+> - Installing an undeclared library through the shell is denied even under a grant.
+>
+> These have automated tests (`tests/core/stages.test.mjs`, `tests/core/knowledge.test.mjs`,
+> `tests/integration/knowledge-flow.test.mjs`) but have not yet been run in a live Claude Code session.
+
 This document explains the repository as built: what's in it, how the pieces fit together, every
 interaction the plugin supports, what's been verified against a real Claude Code session versus only
 unit-tested, and where I'd push the design further if this moved past v0.1.
