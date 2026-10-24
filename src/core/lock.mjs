@@ -5,7 +5,7 @@
 // sequence atomic as a whole. Two hook processes racing for the same
 // directory's state (or the shared stats file) could otherwise interleave
 // and drop one side's update. This is a small mutex using exclusive file
-// creation — no external dependency, no distributed-locking ambition, just
+// creation, no external dependency, no distributed-locking ambition, just
 // enough to make the read-modify-write critical sections in this plugin
 // safe against local concurrent Node processes.
 
@@ -22,7 +22,7 @@ function sleepSync(ms) {
 }
 
 // On Windows, a concurrent create/delete race on the same path can surface
-// as EPERM (sometimes EBUSY) instead of EEXIST — NTFS briefly reports
+// as EPERM (sometimes EBUSY) instead of EEXIST, NTFS briefly reports
 // "access denied" while a file is mid-delete rather than "already exists".
 // Reproduced directly: 20 concurrent processes locking the same path hit
 // this roughly 1 in 30 runs. Treat all three as "contended, keep retrying",

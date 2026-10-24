@@ -1,5 +1,5 @@
 // Aggregate counters only. Never a human comprehension/skill score
-// (directive section 2.5 / 22 — this is a workflow gate, not a ranking).
+// (directive section 2.5 / 22, this is a workflow gate, not a ranking).
 
 import fs from 'node:fs';
 import path from 'node:path';

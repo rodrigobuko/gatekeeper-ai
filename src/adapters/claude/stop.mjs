@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Stop hook adapter. Never forces continuation (no recursion risk) — it
+// Stop hook adapter. Never forces continuation (no recursion risk), it
 // only does bookkeeping: if the active grant was used to perform a
 // protected mutation during the turn that just ended, revoke it so
 // unrelated next work cannot silently inherit it (directive section 19).

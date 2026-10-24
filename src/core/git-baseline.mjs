@@ -1,11 +1,11 @@
 // Lightweight local Git baseline (hardening section 9). Captured once when
-// a challenge opens, for change-shape verification later — never for
+// a challenge opens, for change-shape verification later, never for
 // semantic grading, and never storing a full diff persistently. This is
 // groundwork for a future pre-push gate (roadmap), not one itself.
 //
 // Uses `git` as a plain external tool the same way any dev workflow would;
 // this is not Claude-specific, so it stays in core. Every call tolerates
-// git being absent or the directory not being a repo — this feature is
+// git being absent or the directory not being a repo, this feature is
 // best-effort and silent when unavailable, never a hard requirement.
 
 import { execFileSync } from 'node:child_process';
@@ -35,7 +35,7 @@ export function captureGitBaseline(cwd) {
 // On-demand change-shape summary (never persisted). Returns null when there
 // is no baseline (not a git repo at challenge time) or git is unavailable
 // now. `approvedFiles` is the current grant's file list, if any, used only
-// to flag protected files that changed outside it — a diagnostic signal,
+// to flag protected files that changed outside it, a diagnostic signal,
 // not an enforcement mechanism (the real enforcement is PreToolUse).
 export function computeChangeShape(cwd, baseline, approvedFiles = []) {
   if (!baseline || !baseline.headSha) return null;

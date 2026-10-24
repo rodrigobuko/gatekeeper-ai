@@ -31,7 +31,7 @@ test('a locked challenge produces a systemMessage reminder, shown to the human o
   const out = JSON.parse(result.stdout);
   assert.match(out.systemMessage, /LOCKED/);
   assert.match(out.systemMessage, /Add cache/);
-  // Never a "decision" field — SessionStart cannot allow/deny anything.
+  // Never a "decision" field, SessionStart cannot allow/deny anything.
   assert.equal('hookSpecificOutput' in out, false);
 });
 

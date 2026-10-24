@@ -4,7 +4,7 @@
 // out of scope; otherwise stays silent and lets Claude Code's normal
 // permission flow decide (directive section 8).
 //
-// A crash or unrecognized input here fails OPEN (exits 0, no decision) —
+// A crash or unrecognized input here fails OPEN (exits 0, no decision),
 // Gatekeeper is workflow enforcement, not a security sandbox, and a bug in
 // this adapter must not be able to lock a developer out of their own editor
 // with no recourse (directive section 2.10). A corrupted Gatekeeper STATE
@@ -56,7 +56,7 @@ function main() {
       : '';
     printJson(denyResponse('PreToolUse', `${result.reason}${suffix}`));
   }
-  // allowed (or nothing to evaluate): print nothing, exit 0 — no Gatekeeper
+  // allowed (or nothing to evaluate): print nothing, exit 0, no Gatekeeper
   // decision, Claude Code's normal permission flow proceeds.
 }
 

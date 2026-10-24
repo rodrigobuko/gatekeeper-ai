@@ -388,7 +388,7 @@ test('re-granting the SAME already-granted challenge only needs a non-bypass res
   revokeGrantIfUsed(state); // Stop: grant revoked, challenge itself is untouched
 
   // The next turn opens with an ordinary message ("continue"), not a
-  // fresh explanation — this must still be enough to re-grant the SAME
+  // fresh explanation, this must still be enough to re-grant the SAME
   // challenge, because comprehension was already demonstrated once.
   recordUserResponse(state, { classification: 'other' });
   const second = grantTeachback(state, { assessment: 'Still the same approved change.' });

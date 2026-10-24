@@ -7,7 +7,7 @@ body:
     attributes:
       value: |
         Please run `gatekeeper doctor` (or `gatekeeper doctor --json`) and
-        paste its output below — it's designed to be safe to share, with no
+        paste its output below, it's designed to be safe to share, with no
         tokens, keys, prompts, or source code. Please redact anything
         project-specific from the rest of this report (file names, business
         logic, etc.) if it isn't relevant to the bug.

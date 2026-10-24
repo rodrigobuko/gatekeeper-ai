@@ -178,7 +178,7 @@ test('two-stage departure: confirm right after request, with no intervening user
   assert.match(request.stdout, /DEPART GATEKEEPER/);
 
   // A model calling --confirm immediately, with no real human message in
-  // between, must not succeed — confirmedByUser can only come from the
+  // between, must not succeed, confirmedByUser can only come from the
   // UserPromptSubmit hook observing an actual user message.
   const prematureConfirm = runCli(['depart', '--confirm'], { cwd, home });
   assert.equal(prematureConfirm.status, 1);

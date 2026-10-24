@@ -22,7 +22,7 @@ jobs:
           node-version: ${{ matrix.node }}
 
       # Same command PILOT_TESTING.md and README.md tell contributors to
-      # run — CI must trust the documented command, not a separate one.
+      # run, CI must trust the documented command, not a separate one.
       - name: npm test
         run: npm test
 
@@ -44,7 +44,7 @@ jobs:
       # `claude plugin validate` needs the Claude Code CLI installed; if
       # that installation step becomes unreliable/rate-limited in CI, this
       # job is allowed to fail without blocking the required `test` job
-      # (see continue-on-error below) — local release validation
+      # (see continue-on-error below), local release validation
       # (`npm run validate` / `claude plugin validate .`) remains the
       # authoritative check either way. See README's CI section.
       - name: Install Claude Code CLI

@@ -2,7 +2,7 @@
 // Cross-platform test runner entry point. `node --test tests/` is not
 // reliable across every Node/npm/shell combination (npm's argv handling and
 // some Node versions resolve a bare directory argument as a module
-// specifier rather than a directory to scan — this is the exact failure
+// specifier rather than a directory to scan, this is the exact failure
 // the public-pilot audit reproduced). Discovering files ourselves and
 // passing an explicit file list to `--test` removes that ambiguity, and
 // avoids depending on shell glob expansion (which differs between

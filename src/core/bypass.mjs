@@ -26,7 +26,7 @@
 // ..."). Rather than trying to parse that split, this module uses length
 // as the discriminator: passive-approval and help-request phrases are only
 // classified as such when they dominate a SHORT message. A longer message
-// — even one that opens with a question — falls through to
+//, even one that opens with a question, falls through to
 // teachback_candidate, where Claude's own judgment (not this classifier)
 // decides whether it actually demonstrates understanding.
 
@@ -36,7 +36,7 @@ const MIN_SUBSTANTIVE_WORDS = 6;
 
 // Each pattern is a whole-phrase regex, case-insensitive, tolerant of extra
 // whitespace. See bypass detection design note in the original directive
-// (section 15 / 2.9) — this list is unchanged from v0.1.
+// (section 15 / 2.9), this list is unchanged from v0.1.
 const BYPASS_PATTERNS = [
   // English
   /\bskip (the )?gatekeeper\b/i,

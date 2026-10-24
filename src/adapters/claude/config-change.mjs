@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-// ConfigChange hook adapter — best-effort defense in depth (directive
+// ConfigChange hook adapter, best-effort defense in depth (directive
 // section 21). Claude Code fires this event on every settings/skills
 // change with no per-hook matcher, and its exact payload shape for "what
 // changed" is not something this v0.1 relies on. So this adapter does NOT
 // attempt to parse a diff or decide whether the change specifically
-// touched Gatekeeper's own hooks/skills — that would be guessing at an
+// touched Gatekeeper's own hooks/skills, that would be guessing at an
 // unconfirmed schema and pretending to a precision we don't have.
 //
 // What it DOES do: record that a configuration change happened at all,
@@ -31,7 +31,7 @@ function main() {
   const home = resolveHome();
   // Read-only: this adapter never mutates session state, so it neither
   // needs nor takes the state lock (a needless resave here would itself be
-  // a spurious write racing against a concurrent hook — the opposite of
+  // a spurious write racing against a concurrent hook, the opposite of
   // hardening P1.1's goal).
   const { state } = loadState(home, cwd);
 

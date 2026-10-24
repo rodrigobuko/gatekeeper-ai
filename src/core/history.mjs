@@ -1,4 +1,4 @@
-// Append-only, bounded-retention event log. Stores compact metadata only —
+// Append-only, bounded-retention event log. Stores compact metadata only,
 // never full prompts, full assistant messages, or source code (directive
 // section 12). Each entry is one NDJSON line so it can be tailed cheaply.
 

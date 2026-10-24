@@ -37,10 +37,10 @@ test('"looks good, go ahead" does not make the developer eligible for grant', ()
   runNodeScript(USER_PROMPT_SUBMIT_PATH, { input: userPromptSubmitInput({ cwd, sessionId, prompt: 'looks good, go ahead' }), cwd, home });
 
   // "looks good, go ahead" is not a recognized bypass phrase, but it also
-  // isn't a teach-back — Gatekeeper cannot tell the difference mechanically
+  // isn't a teach-back, Gatekeeper cannot tell the difference mechanically
   // (that judgment is the gate skill's job via `reject`). What Gatekeeper
   // DOES guarantee mechanically is that grant requires the skill to
-  // explicitly call it — passive chatter alone never opens the gate,
+  // explicitly call it, passive chatter alone never opens the gate,
   // because nothing here ever runs `gatekeeper grant` on the model's
   // behalf. This test documents that guarantee at the adapter boundary.
   const status = runCli(['status'], { cwd, home });

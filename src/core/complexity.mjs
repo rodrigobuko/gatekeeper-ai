@@ -1,7 +1,7 @@
 // Deterministic complexity heuristic. It asks a question; it never decides
 // the design is wrong, and it never outputs a score (directive section 17 /
-// hardening section 10). Signals only — the skill turns a triggered signal
-// into a specific question ("this crosses four modules — which of them
+// hardening section 10). Signals only, the skill turns a triggered signal
+// into a specific question ("this crosses four modules, which of them
 // actually needs to change?"), not a verdict.
 
 const DIRECTORIES_CROSSED_THRESHOLD = 4;
@@ -49,7 +49,7 @@ export function computeComplexity({
 }
 
 // Counts distinct parent directories among a set of already-normalized
-// (forward-slash) file paths. Purely path-based — no code parsing, no AST.
+// (forward-slash) file paths. Purely path-based, no code parsing, no AST.
 export function countDirectoriesCrossed(normalizedFiles) {
   const dirs = new Set();
   for (const f of normalizedFiles) {

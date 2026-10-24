@@ -24,7 +24,7 @@ export function resolveHome(explicitHome) {
   return explicitHome || process.env.GATEKEEPER_HOME || path.join(os.homedir(), '.gatekeeper');
 }
 
-// Syntax-based, not host-based (see files.mjs) — a Windows-style cwd must
+// Syntax-based, not host-based (see files.mjs), a Windows-style cwd must
 // key consistently even when this code runs on a POSIX test/CI host.
 function normalizeCwdForKey(cwd) {
   const mod = pickPathModule(cwd, cwd);

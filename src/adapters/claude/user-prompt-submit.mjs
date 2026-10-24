@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // UserPromptSubmit hook adapter. Tracks the mandatory human-turn counter
 // (directive section 14) and detects obvious conversational bypass attempts
-// (section 15). Never blocks the prompt — a blocked prompt can't reach
+// (section 15). Never blocks the prompt, a blocked prompt can't reach
 // Claude for the "let the message reach Claude" requirement, so this hook
 // always allows and, on a bypass, appends plain-text context instead.
 
@@ -26,7 +26,7 @@ function main() {
     // P0.6: the only thing that can ever set `departure.confirmedByUser` is
     // this hook observing a real human message containing the exact
     // confirmation phrase. A model calling the CLI cannot create this by
-    // itself — see engine.confirmDeparture() and depart --confirm.
+    // itself, see engine.confirmDeparture() and depart --confirm.
     if (state.departure && state.departure.pending && !state.departure.confirmedByUser) {
       if (prompt.trim().toUpperCase().includes(DEPART_CONFIRMATION_PHRASE)) {
         state.departure.confirmedByUser = true;

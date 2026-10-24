@@ -1,7 +1,7 @@
 // Concurrency regression tests for hardening P1.1. These spawn real,
 // concurrent child processes (not just concurrent promises in one process)
 // racing to mutate the same on-disk state/stats, to prove the lock actually
-// prevents a lost update — the exact failure mode a temp-file-then-rename
+// prevents a lost update, the exact failure mode a temp-file-then-rename
 // write alone does not protect against.
 
 import test from 'node:test';

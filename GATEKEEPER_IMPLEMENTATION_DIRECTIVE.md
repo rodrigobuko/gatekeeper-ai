@@ -1,4 +1,4 @@
-# GATEKEEPER — Claude Code Implementation Directive (v0.1)
+# GATEKEEPER: Claude Code Implementation Directive (v0.1)
 
 > **Understand it before you ship it.**
 
@@ -404,7 +404,7 @@ ConfigChange      when current API supports our intended defense reliably
 
 Hook scripts should run via Node and `${CLAUDE_PLUGIN_ROOT}` rather than assuming the repository path.
 
-Conceptual shape only — validate exact schema before finalizing:
+Conceptual shape only, validate exact schema before finalizing:
 
 ```json
 {
@@ -831,11 +831,11 @@ Never create a developer intelligence/skill score.
 Example:
 
 ```text
-✓ 18:03  Gate passed on attempt 2 — 3 files
-× 18:01  Teach-back insufficient — concurrency reasoning missing
-⚔ 17:59  Override attempt — gate remained locked
-◇ 17:57  Challenge started — 3 files
-↻ 16:42  Plan revised — 2 → 3 files
+✓ 18:03  Gate passed on attempt 2, 3 files
+× 18:01  Teach-back insufficient, concurrency reasoning missing
+⚔ 17:59  Override attempt, gate remained locked
+◇ 17:57  Challenge started, 3 files
+↻ 16:42  Plan revised, 2 → 3 files
 ```
 
 Use bounded retention/rotation so history does not grow forever.
@@ -937,7 +937,7 @@ When mutation is denied:
 1. inspect enough code;
 2. summarize a concise plan;
 3. register challenge;
-4. ask 1–3 open questions;
+4. ask 1 to 3 open questions;
 5. allow help/discussion;
 6. return to teach-back;
 7. evaluate;
@@ -973,8 +973,8 @@ Do not shame the developer.
 Simple deterministic baseline:
 
 ```text
-1–4 planned files  → normal
-5–8 planned files  → simplicity challenge
+1 to 4 planned files  → normal
+5 to 8 planned files  → simplicity challenge
 9+ planned files   → strong complexity warning + simplicity challenge
 ```
 
@@ -1181,8 +1181,8 @@ Prefer Node's built-in test runner. Avoid runtime dependencies unless clearly ne
 
 ### Complexity
 
-- 1–4 normal;
-- 5–8 simplicity;
+- 1 to 4 normal;
+- 5 to 8 simplicity;
 - 9+ high;
 - architecture/schema flags trigger;
 - 3+ new source files trigger.

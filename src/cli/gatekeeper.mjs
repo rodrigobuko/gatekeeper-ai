@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Gatekeeper CLI. This is the only mechanical way to move the gate between
-// LOCKED and GRANTED — Claude follows the gate skill's instructions to call
+// LOCKED and GRANTED, Claude follows the gate skill's instructions to call
 // it, but the *decisions* it enforces (a real later human message, a
 // non-empty assessment, matching scope) are checked here in code, not left
 // to model obedience (directive section 14).
@@ -49,7 +49,7 @@ function toArray(value) {
 
 // A flag repeated across separate `--name value` occurrences accumulates
 // (e.g. `--must-not-change "a" --must-not-change "b"` -> ["a", "b"]) rather
-// than the last one winning — needed for optional repeatable flags like
+// than the last one winning, needed for optional repeatable flags like
 // --must-not-change / --assumption (hardening section 8).
 function setFlag(flags, name, values) {
   const value = values.length === 0 ? true : values.length === 1 ? values[0] : values;
@@ -229,7 +229,7 @@ function cmdRevise(home, cwd, flags) {
 
   updateStats(home, (stats) => {
     // A revision opens a genuinely new challenge (new id, reset counters),
-    // so it counts as a gate faced too — keeps gatesPassed <= gatesFaced.
+    // so it counts as a gate faced too, keeps gatesPassed <= gatesFaced.
     stats.gatesFaced += 1;
     stats.planRevisions += 1;
     if (result.challenge.complexity.requiresSimplicityChallenge) stats.simplicityChallenges += 1;
@@ -308,7 +308,7 @@ function cmdDepart(home, cwd, flags) {
 }
 
 // P1.4: stable, machine-readable status for status-line/IDE integrations
-// and debug tooling. No secrets, no full prompts — the same compact-metadata
+// and debug tooling. No secrets, no full prompts, the same compact-metadata
 // discipline as history.mjs.
 function statusToJson(state, corrupt) {
   const grant = currentGrant(state);
@@ -377,7 +377,7 @@ function cmdStatus(home, cwd, flags) {
 }
 
 // Section 9 diagnostic: on-demand change-shape summary since the challenge
-// opened. Nothing here is persisted — it's computed fresh from git each
+// opened. Nothing here is persisted, it's computed fresh from git each
 // time. This is groundwork for a future pre-push gate, not one itself: it
 // only reports, it never denies anything.
 function cmdDiff(home, cwd, flags) {
@@ -443,21 +443,21 @@ function cmdStats(home) {
 function describeHistoryEntry(entry) {
   switch (entry.type) {
     case 'gate_passed':
-      return `Gate passed on attempt ${entry.attempt} — ${entry.fileCount} files`;
+      return `Gate passed on attempt ${entry.attempt}: ${entry.fileCount} files`;
     case 'teachback_rejected':
-      return `Teach-back insufficient — ${entry.reason || 'no reason recorded'}`;
+      return `Teach-back insufficient: ${entry.reason || 'no reason recorded'}`;
     case 'override_attempt':
-      return 'Override attempt — gate remained locked';
+      return 'Override attempt: gate remained locked';
     case 'challenge_started':
-      return `Challenge started — ${entry.fileCount} files`;
+      return `Challenge started: ${entry.fileCount} files`;
     case 'plan_revised':
-      return `Plan revised — ${entry.summary || `${entry.fileCount} files`}`;
+      return `Plan revised: ${entry.summary || `${entry.fileCount} files`}`;
     case 'departure':
-      return 'Explicit departure — Gatekeeper left unguarded';
+      return 'Explicit departure: Gatekeeper left unguarded';
     case 'reset':
-      return 'Session reset — gate locked';
+      return 'Session reset: gate locked';
     case 'session_relocked':
-      return `Gate re-locked — ${entry.reason || 'new session detected'}`;
+      return `Gate re-locked: ${entry.reason || 'new session detected'}`;
     case 'protection_change_attempt':
       return 'Configuration changed while gate was active';
     default:

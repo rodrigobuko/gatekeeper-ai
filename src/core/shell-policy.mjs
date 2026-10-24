@@ -12,11 +12,11 @@
 //   known read-only        -> allow
 //   known test/check       -> allow
 //   known mutation         -> deny
-//   unknown                -> deny by default (was previously allow — this
+//   unknown                -> deny by default (was previously allow, this
 //                              was a real bypass: `python mutate.py`,
 //                              `git checkout -- f`, `curl -o f url`, etc.
 //                              were unclassified and silently let through)
-// Policy once GRANTED: unchanged — shell mutation is allowed outright
+// Policy once GRANTED: unchanged, shell mutation is allowed outright
 // (best-effort, not scope-checked; see engine.mjs), since the developer has
 // already passed the teach-back for this challenge.
 
@@ -122,7 +122,7 @@ function mutationPatternsFor(shell) {
 // Trusted Gatekeeper CLI invocation (directive section 24 / hardening P0.3)
 //
 // A command is trusted ONLY when the ENTIRE command is one of the exact
-// supported invocation shapes — never merely because it *contains* the word
+// supported invocation shapes, never merely because it *contains* the word
 // "gatekeeper" or a path ending in gatekeeper.mjs somewhere. Two things are
 // required together:
 //   1. no unquoted shell control/chaining operator anywhere in the string
@@ -134,7 +134,7 @@ function mutationPatternsFor(shell) {
 //      `node <path ending in gatekeeper.mjs> <subcommand> ...`.
 // Both checks must pass. This intentionally rejects
 // `gatekeeper status && rm file`, `gatekeeper status; rm file`,
-// `gatekeeper status > f`, and `gatekeeper status | x` — all real bypasses
+// `gatekeeper status > f`, and `gatekeeper status | x`, all real bypasses
 // found during the public-pilot security audit.
 
 const CLI_SUBCOMMANDS = [

@@ -7,7 +7,7 @@ body:
     attributes:
       value: |
         Thanks for pilot testing Gatekeeper. Please don't paste your actual
-        project's source code or prompts here — the questions below are
+        project's source code or prompts here, the questions below are
         designed to be answerable without them.
 
   - type: input
@@ -74,7 +74,7 @@ body:
     id: simplified-plan
     attributes:
       label: Did Gatekeeper change or simplify your plan for the better?
-      options: ["Yes", "No", "N/A — plan was already simple"]
+      options: ["Yes", "No", "N/A, plan was already simple"]
     validations:
       required: true
 
@@ -88,7 +88,7 @@ body:
     id: false-block
     attributes:
       label: Did it ever block something it shouldn't have (a false block)?
-      options: ["No", "Yes — see notes below"]
+      options: ["No", "Yes, see notes below"]
     validations:
       required: true
 
@@ -96,7 +96,7 @@ body:
     id: missed-block
     attributes:
       label: Did you find a way to bypass it that you don't think should have worked?
-      options: ["No", "Yes — see notes below"]
+      options: ["No", "Yes, see notes below"]
     validations:
       required: true
 
@@ -104,7 +104,7 @@ body:
     id: disable-reason
     attributes:
       label: What would make you turn this off?
-      placeholder: Be honest — this is the most useful answer in this form.
+      placeholder: Be honest, this is the most useful answer in this form.
 
   - type: textarea
     id: notes

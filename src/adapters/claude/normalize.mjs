@@ -1,6 +1,6 @@
 // Translates between Claude Code's hook JSON dialect and Gatekeeper Core's
 // harness-independent shapes. This is the ONLY file that should know field
-// names like `tool_input.file_path` or `permissionDecisionReason` — if a
+// names like `tool_input.file_path` or `permissionDecisionReason`, if a
 // future Claude Code version renames a field, this is where the fix goes.
 
 import fs from 'node:fs';

@@ -15,7 +15,7 @@ import path from 'node:path';
 const WINDOWS_DRIVE_RE = /^[A-Za-z]:[\\/]/;
 const WINDOWS_UNC_RE = /^\\\\[^\\]+\\[^\\]+/;
 
-// Returns 'win32', 'posix', or null (ambiguous — e.g. a bare relative path
+// Returns 'win32', 'posix', or null (ambiguous, e.g. a bare relative path
 // like "src/a.ts" that contains no OS-specific signal).
 function detectPathStyle(value) {
   if (typeof value !== 'string' || value === '') return null;
@@ -124,7 +124,7 @@ export function normalizeFilePath(filePath, cwd) {
   let normalized = mod.normalize(absolute).split(mod.sep).join('/');
   // Lower-case a Windows drive letter (C:/... vs c:/...) so comparisons
   // between hook-provided and CLI-provided paths are stable. Do NOT
-  // lowercase the rest of the path — case can matter outside Windows.
+  // lowercase the rest of the path, case can matter outside Windows.
   normalized = normalized.replace(/^([A-Za-z]):\//, (_, drive) => `${drive.toLowerCase()}:/`);
   return normalized;
 }
